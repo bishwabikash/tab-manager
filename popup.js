@@ -112,7 +112,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             <span class="domain-color color-${domain.color}"></span>
             <span class="domain-name">${escapeHtml(domain.name)}</span>
           </div>
-          <span class="domain-count">${domain.tabs.length}</span>
+          <div class="domain-meta">
+            <span class="domain-count">${domain.tabs.length}</span>
+            <svg class="collapse-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </div>
         </div>
         <div class="domain-tabs">
           ${domain.tabs.map(tab => createTabItem(tab)).join('')}
@@ -212,8 +217,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll('.domain-header').forEach(header => {
       header.addEventListener('click', () => {
         const group = header.parentElement;
-        const tabs = group.querySelector('.domain-tabs');
-        tabs.style.display = tabs.style.display === 'none' ? 'block' : 'none';
+        group.classList.toggle('collapsed');
       });
     });
   }
