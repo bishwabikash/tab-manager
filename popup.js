@@ -11,14 +11,36 @@ document.addEventListener('DOMContentLoaded', async () => {
   const splitViewSection = document.getElementById('splitViewSection');
   const splitViewTabs = document.getElementById('splitViewTabs');
 
+  // New elements
+  const searchInput = document.getElementById('searchInput');
+  const searchClear = document.getElementById('searchClear');
+  const findDuplicatesBtn = document.getElementById('findDuplicatesBtn');
+  const duplicatesSection = document.getElementById('duplicatesSection');
+  const duplicateList = document.getElementById('duplicateList');
+  const duplicateCount = document.getElementById('duplicateCount');
+  const closeDuplicatesBtn = document.getElementById('closeDuplicatesBtn');
+  const recentlyClosedSection = document.getElementById('recentlyClosedSection');
+  const recentlyClosedList = document.getElementById('recentlyClosedList');
+
+  // Store all tabs data for search filtering
+  let allTabsData = null;
+  let currentSearchQuery = '';
+
   // Load settings and tabs on popup open
   await loadSettings();
   await loadTabs();
+  await loadRecentlyClosed();
 
   // Event Listeners
   groupAllBtn.addEventListener('click', handleGroupAll);
   ungroupAllBtn.addEventListener('click', handleUngroupAll);
   autoGroupToggle.addEventListener('change', handleAutoGroupToggle);
+  findDuplicatesBtn.addEventListener('click', handleFindDuplicates);
+  closeDuplicatesBtn.addEventListener('click', handleCloseAllDuplicates);
+
+  // Search functionality
+  searchInput.addEventListener('input', handleSearch);
+  searchClear.addEventListener('click', clearSearch);
 
   /**
    * Send message to background script
@@ -65,6 +87,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
+    // Store tabs data for search
+    allTabsData = result;
+
     // Update tab count
     tabCount.textContent = `${result.totalTabs} tab${result.totalTabs !== 1 ? 's' : ''}`;
 
@@ -76,8 +101,33 @@ document.addEventListener('DOMContentLoaded', async () => {
       splitViewSection.style.display = 'none';
     }
 
-    // Render domain groups
-    renderDomainGroups(result.domains);
+    // Render domain groups (with search filter if active)
+    renderDomainGroups(result.domains, currentSearchQuery);
+  }
+
+  /**
+   * Handle search input
+   */
+  function handleSearch(e) {
+    currentSearchQuery = e.target.value.toLowerCase().trim();
+    searchClear.style.display = currentSearchQuery ? 'flex' : 'none';
+
+    if (allTabsData) {
+      renderDomainGroups(allTabsData.domains, currentSearchQuery);
+    }
+  }
+
+  /**
+   * Clear search
+   */
+  function clearSearch() {
+    searchInput.value = '';
+    currentSearchQuery = '';
+    searchClear.style.display = 'none';
+    if (allTabsData) {
+      renderDomainGroups(allTabsData.domains, '');
+    }
+    searchInput.focus();
   }
 
   /**
@@ -89,9 +139,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   /**
-   * Render domain groups
+   * Render domain groups with optional search filter
    */
-  function renderDomainGroups(domains) {
+  function renderDomainGroups(domains, searchQuery = '') {
     if (!domains || domains.length === 0) {
       domainList.innerHTML = `
         <div class="empty-state">
@@ -105,8 +155,36 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    domainList.innerHTML = domains.map(domain => `
-      <div class="domain-group collapsed" data-domain="${escapeHtml(domain.name)}">
+    // Filter domains based on search query
+    let filteredDomains = domains;
+    if (searchQuery) {
+      filteredDomains = domains.map(domain => {
+        const filteredTabs = domain.tabs.filter(tab =>
+          tab.title.toLowerCase().includes(searchQuery) ||
+          tab.url.toLowerCase().includes(searchQuery)
+        );
+        return filteredTabs.length > 0 ? { ...domain, tabs: filteredTabs } : null;
+      }).filter(Boolean);
+    }
+
+    if (filteredDomains.length === 0) {
+      domainList.innerHTML = `
+        <div class="no-results">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <p>No tabs match "${escapeHtml(searchQuery)}"</p>
+        </div>
+      `;
+      return;
+    }
+
+    // Determine if groups should be collapsed (only when not searching)
+    const collapsedClass = searchQuery ? '' : 'collapsed';
+
+    domainList.innerHTML = filteredDomains.map(domain => `
+      <div class="domain-group ${collapsedClass}" data-domain="${escapeHtml(domain.name)}">
         <div class="domain-header">
           <div class="domain-info">
             <span class="domain-color color-${domain.color}"></span>
@@ -120,7 +198,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
         </div>
         <div class="domain-tabs">
-          ${domain.tabs.map(tab => createTabItem(tab)).join('')}
+          ${domain.tabs.map(tab => createTabItem(tab, false, searchQuery)).join('')}
         </div>
       </div>
     `).join('');
@@ -131,9 +209,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   /**
-   * Create HTML for a single tab item
+   * Create HTML for a single tab item with optional search highlighting
    */
-  function createTabItem(tab, showSplitBadge = false) {
+  function createTabItem(tab, showSplitBadge = false, searchQuery = '') {
     const favicon = tab.favIconUrl
       ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="" onerror="this.style.display='none'">`
       : getFaviconPlaceholder();
@@ -157,10 +235,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       </span>
     ` : '';
 
+    // Highlight search matches in title
+    let displayTitle = escapeHtml(tab.title || 'New Tab');
+    if (searchQuery) {
+      const regex = new RegExp(`(${escapeRegex(searchQuery)})`, 'gi');
+      displayTitle = displayTitle.replace(regex, '<span class="search-highlight">$1</span>');
+    }
+
     return `
       <div class="tab-item ${activeClass}" data-tab-id="${tab.id}" title="${escapeHtml(tab.title)}">
         ${favicon}
-        <span class="tab-title">${escapeHtml(tab.title || 'New Tab')}</span>
+        <span class="tab-title">${displayTitle}</span>
         ${pinnedIcon}
         ${splitBadge}
         <div class="tab-actions">
@@ -172,6 +257,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         </div>
       </div>
     `;
+  }
+
+  /**
+   * Escape regex special characters
+   */
+  function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   /**
@@ -246,7 +338,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 5v14M5 12h14"/>
       </svg>
-      Group All Tabs
+      Group All
     `;
   }
 
@@ -271,7 +363,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M5 12h14"/>
       </svg>
-      Ungroup All
+      Ungroup
     `;
   }
 
@@ -282,6 +374,101 @@ document.addEventListener('DOMContentLoaded', async () => {
     const settings = await sendMessage('loadSettings');
     settings.autoGroup = autoGroupToggle.checked;
     await sendMessage('saveSettings', { settings });
+  }
+
+  /**
+   * Find duplicate tabs
+   */
+  async function handleFindDuplicates() {
+    const result = await sendMessage('findDuplicates');
+
+    if (!result.success || result.duplicates.length === 0) {
+      duplicatesSection.style.display = 'none';
+      // Show a brief message
+      findDuplicatesBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 6L9 17l-5-5"/>
+        </svg>
+      `;
+      findDuplicatesBtn.title = 'No duplicates found!';
+      setTimeout(() => {
+        findDuplicatesBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="8" y="8" width="12" height="12" rx="2"/>
+            <path d="M4 16V4h12"/>
+          </svg>
+        `;
+        findDuplicatesBtn.title = 'Find Duplicates';
+      }, 2000);
+      return;
+    }
+
+    // Show duplicates section
+    duplicatesSection.style.display = 'block';
+    duplicateCount.textContent = result.duplicates.length;
+
+    duplicateList.innerHTML = result.duplicates.map(dup => `
+      <div class="duplicate-item" data-url="${escapeHtml(dup.url)}">
+        <div class="duplicate-info">
+          ${dup.favIconUrl ? `<img class="tab-favicon" src="${escapeHtml(dup.favIconUrl)}" alt="">` : getFaviconPlaceholder()}
+          <span class="tab-title">${escapeHtml(dup.title)}</span>
+        </div>
+        <span class="duplicate-badge">${dup.count}×</span>
+      </div>
+    `).join('');
+  }
+
+  /**
+   * Close all duplicate tabs
+   */
+  async function handleCloseAllDuplicates() {
+    closeDuplicatesBtn.disabled = true;
+    closeDuplicatesBtn.textContent = 'Closing...';
+
+    await sendMessage('closeDuplicates');
+    duplicatesSection.style.display = 'none';
+    await loadTabs();
+
+    closeDuplicatesBtn.disabled = false;
+    closeDuplicatesBtn.textContent = 'Close All Duplicates';
+  }
+
+  /**
+   * Load recently closed tabs
+   */
+  async function loadRecentlyClosed() {
+    try {
+      const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 5 });
+      const closedTabs = sessions.filter(s => s.tab).map(s => s.tab);
+
+      if (closedTabs.length === 0) {
+        recentlyClosedSection.style.display = 'none';
+        return;
+      }
+
+      recentlyClosedSection.style.display = 'block';
+      recentlyClosedList.innerHTML = closedTabs.map(tab => `
+        <div class="tab-item" data-session-id="${tab.sessionId}" title="${escapeHtml(tab.title)}">
+          ${tab.favIconUrl ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="" onerror="this.style.display='none'">` : getFaviconPlaceholder()}
+          <span class="tab-title">${escapeHtml(tab.title || 'Untitled')}</span>
+          <button class="restore-btn" data-session-id="${tab.sessionId}">Restore</button>
+        </div>
+      `).join('');
+
+      // Attach restore listeners
+      recentlyClosedList.querySelectorAll('.restore-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const sessionId = btn.dataset.sessionId;
+          await chrome.sessions.restore(sessionId);
+          await loadRecentlyClosed();
+          await loadTabs();
+        });
+      });
+    } catch (error) {
+      console.error('Error loading recently closed tabs:', error);
+      recentlyClosedSection.style.display = 'none';
+    }
   }
 
   /**

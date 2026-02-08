@@ -298,12 +298,101 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             case 'loadSettings':
                 sendResponse(await loadSettings());
                 break;
+            case 'findDuplicates':
+                sendResponse(await findDuplicateTabs(request.windowId));
+                break;
+            case 'closeDuplicates':
+                sendResponse(await closeDuplicateTabs(request.windowId));
+                break;
             default:
                 sendResponse({ error: 'Unknown action' });
         }
     })();
     return true; // Indicates async response
 });
+
+// Keyboard shortcut handlers
+chrome.commands.onCommand.addListener(async (command) => {
+    switch (command) {
+        case 'group-all-tabs':
+            await groupTabsByDomain();
+            break;
+        case 'ungroup-all-tabs':
+            await ungroupAllTabs();
+            break;
+    }
+});
+
+/**
+ * Find duplicate tabs (same URL)
+ * @param {number} windowId - Optional window ID
+ * @returns {Object} Duplicate tabs info
+ */
+async function findDuplicateTabs(windowId = chrome.windows.WINDOW_ID_CURRENT) {
+    try {
+        const tabs = await chrome.tabs.query({ windowId });
+        const urlMap = new Map();
+
+        // Count occurrences of each URL
+        for (const tab of tabs) {
+            if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+                continue;
+            }
+
+            const url = tab.url;
+            if (!urlMap.has(url)) {
+                urlMap.set(url, { tabs: [], title: tab.title, favIconUrl: tab.favIconUrl });
+            }
+            urlMap.get(url).tabs.push(tab.id);
+        }
+
+        // Filter to only duplicates (more than one)
+        const duplicates = [];
+        for (const [url, data] of urlMap.entries()) {
+            if (data.tabs.length > 1) {
+                duplicates.push({
+                    url,
+                    title: data.title,
+                    favIconUrl: data.favIconUrl,
+                    count: data.tabs.length,
+                    tabIds: data.tabs
+                });
+            }
+        }
+
+        return { success: true, duplicates };
+    } catch (error) {
+        console.error('Error finding duplicates:', error);
+        return { success: false, error: error.message, duplicates: [] };
+    }
+}
+
+/**
+ * Close duplicate tabs (keep the first, close the rest)
+ * @param {number} windowId - Optional window ID
+ * @returns {Object} Result
+ */
+async function closeDuplicateTabs(windowId = chrome.windows.WINDOW_ID_CURRENT) {
+    try {
+        const result = await findDuplicateTabs(windowId);
+        if (!result.success) return result;
+
+        const tabsToClose = [];
+        for (const dup of result.duplicates) {
+            // Keep the first tab, close the rest
+            tabsToClose.push(...dup.tabIds.slice(1));
+        }
+
+        if (tabsToClose.length > 0) {
+            await chrome.tabs.remove(tabsToClose);
+        }
+
+        return { success: true, closedCount: tabsToClose.length };
+    } catch (error) {
+        console.error('Error closing duplicates:', error);
+        return { success: false, error: error.message };
+    }
+}
 
 // ============================================
 // MEMORY-OPTIMIZED CONTINUOUS MONITORING

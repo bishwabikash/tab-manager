@@ -615,3 +615,196 @@ body {
 .tab-list {
   padding: 8px;
 }
+
+/* Search Section */
+.search-section {
+  padding: 8px 16px;
+  background: var(--md-sys-color-surface-container);
+}
+
+.search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  width: 18px;
+  height: 18px;
+  color: var(--md-sys-color-on-surface-variant);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px 40px 10px 40px;
+  background: var(--md-sys-color-surface-container-high);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-full);
+  font: var(--md-sys-typescale-body-medium);
+  color: var(--md-sys-color-on-surface);
+  transition: all var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+.search-input::placeholder {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--md-sys-color-primary);
+  background: var(--md-sys-color-surface-container-highest);
+}
+
+.search-clear {
+  position: absolute;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  background: transparent;
+  border: none;
+  color: var(--md-sys-color-on-surface-variant);
+  cursor: pointer;
+  border-radius: var(--md-sys-shape-corner-full);
+  transition: all var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+.search-clear:hover {
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+}
+
+.search-clear svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Duplicates Section */
+.duplicates-section {
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.duplicates-section .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.duplicates-section .section-header h2 {
+  color: var(--group-red);
+}
+
+.duplicate-count {
+  background: var(--group-red);
+  color: #000;
+  padding: 2px 8px;
+  border-radius: var(--md-sys-shape-corner-full);
+  font: var(--md-sys-typescale-label-medium);
+  margin-left: 8px;
+}
+
+.duplicate-list {
+  padding: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.duplicate-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--md-sys-color-surface-container);
+  border-radius: var(--md-sys-shape-corner-small);
+  margin-bottom: 4px;
+}
+
+.duplicate-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.duplicate-info .tab-title {
+  flex: 1;
+}
+
+.duplicate-badge {
+  background: var(--group-red);
+  color: #000;
+  padding: 2px 6px;
+  border-radius: var(--md-sys-shape-corner-full);
+  font: var(--md-sys-typescale-label-medium);
+  flex-shrink: 0;
+}
+
+/* Recently Closed Section */
+.recently-closed-section {
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.recently-closed-section .section-header h2 {
+  color: var(--md-sys-color-primary);
+}
+
+.restore-btn {
+  padding: 4px 8px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border: none;
+  border-radius: var(--md-sys-shape-corner-small);
+  font: var(--md-sys-typescale-label-medium);
+  cursor: pointer;
+  transition: all var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+.restore-btn:hover {
+  filter: brightness(1.1);
+}
+
+/* Text Button */
+.btn-text {
+  background: transparent;
+  border: none;
+  color: var(--md-sys-color-primary);
+  font: var(--md-sys-typescale-label-large);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--md-sys-shape-corner-small);
+  transition: all var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+.btn-text:hover {
+  background: var(--md-sys-color-primary-container);
+}
+
+/* No Results */
+.no-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--md-sys-color-on-surface-variant);
+  text-align: center;
+}
+
+.no-results svg {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 8px;
+  opacity: 0.5;
+}
+
+/* Highlight search match */
+.search-highlight {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border-radius: 2px;
+  padding: 0 2px;
+}

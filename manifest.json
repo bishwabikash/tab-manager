@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Tab Manager Pro",
-  "version": "1.0.0",
-  "description": "Organize tabs by domain with automatic grouping and split view support",
+  "version": "1.1.0",
+  "description": "Organize tabs by domain with automatic grouping, search, duplicate detection, and split view support",
   "permissions": [
     "tabs",
     "tabGroups",
-    "storage"
+    "storage",
+    "sessions"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -24,5 +25,21 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "commands": {
+    "group-all-tabs": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+G",
+        "mac": "Command+Shift+G"
+      },
+      "description": "Group all tabs by domain"
+    },
+    "ungroup-all-tabs": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+U",
+        "mac": "Command+Shift+U"
+      },
+      "description": "Ungroup all tabs"
+    }
   }
 }
