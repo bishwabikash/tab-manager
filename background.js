@@ -290,51 +290,186 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Indicates async response
 });
 
-// Auto-group new tabs when setting is enabled
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-    if (changeInfo.status === 'complete' && tab.url) {
+// Debounce helper to prevent excessive regrouping
+let regroupDebounceTimer = null;
+function debounceRegroup(windowId, delay = 500) {
+    if (regroupDebounceTimer) {
+        clearTimeout(regroupDebounceTimer);
+    }
+    regroupDebounceTimer = setTimeout(async () => {
         const settings = await loadSettings();
         if (settings.autoGroup) {
-            // Find tabs with same domain and group together
-            const domain = getDomainName(tab.url);
+            await groupTabsByDomain(windowId);
+        }
+        regroupDebounceTimer = null;
+    }, delay);
+}
+
+/**
+ * Check if a single tab needs to be regrouped and do so
+ * @param {Object} tab - Tab object
+ */
+async function ensureTabGrouped(tab) {
+    if (!tab || tab.pinned) return;
+
+    const settings = await loadSettings();
+    if (!settings.autoGroup) return;
+
+    const domain = getDomainName(tab.url);
+    if (domain === 'Chrome' || domain === 'Other') return;
+
+    // Check if tab is currently ungrouped
+    if (tab.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
+        // Find if there's already a group for this domain
+        const groups = await chrome.tabGroups.query({ windowId: tab.windowId });
+        const existingGroup = groups.find(g => g.title === domain);
+
+        if (existingGroup) {
+            // Add to existing group
+            await chrome.tabs.group({ tabIds: [tab.id], groupId: existingGroup.id });
+        } else {
+            // Check if there are other tabs with same domain to group with
             const allTabs = await chrome.tabs.query({ windowId: tab.windowId });
             const sameDomainTabs = allTabs.filter(t =>
                 getDomainName(t.url) === domain && !t.pinned
             );
 
             if (sameDomainTabs.length > 1) {
-                // Check if there's already a group for this domain
-                const groups = await chrome.tabGroups.query({ windowId: tab.windowId });
-                const existingGroup = groups.find(g => g.title === domain);
-
                 const tabIds = sameDomainTabs.map(t => t.id);
-
-                if (existingGroup) {
-                    await chrome.tabs.group({ tabIds, groupId: existingGroup.id });
-                } else {
-                    const groupId = await chrome.tabs.group({ tabIds });
-                    await chrome.tabGroups.update(groupId, {
-                        title: domain,
-                        color: getDomainColor(domain),
-                        collapsed: settings.collapseByDefault
-                    });
-                }
+                const groupId = await chrome.tabs.group({ tabIds });
+                await chrome.tabGroups.update(groupId, {
+                    title: domain,
+                    color: getDomainColor(domain),
+                    collapsed: false
+                });
             }
         }
     }
+}
+
+// Auto-group tabs when URL changes or page loads
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    const settings = await loadSettings();
+    if (!settings.autoGroup) return;
+
+    // Regroup when URL changes (navigation) or when page completes loading
+    if (changeInfo.url || changeInfo.status === 'complete') {
+        // Use debounce to handle rapid changes
+        debounceRegroup(tab.windowId, 300);
+    }
 });
+
+// Monitor when tabs are activated (user switches to a tab)
+// This helps catch when tabs exit split view
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    const settings = await loadSettings();
+    if (!settings.autoGroup) return;
+
+    try {
+        const tab = await chrome.tabs.get(activeInfo.tabId);
+        await ensureTabGrouped(tab);
+    } catch (e) {
+        // Tab might have been closed
+    }
+});
+
+// Monitor when tabs are attached to a window (moved between windows or unsplit)
+chrome.tabs.onAttached.addListener(async (tabId, attachInfo) => {
+    const settings = await loadSettings();
+    if (!settings.autoGroup) return;
+
+    // Delay slightly to let Chrome finish the attach operation
+    setTimeout(async () => {
+        try {
+            const tab = await chrome.tabs.get(tabId);
+            await ensureTabGrouped(tab);
+        } catch (e) {
+            // Tab might have been closed
+        }
+    }, 200);
+});
+
+// Monitor when tabs are moved within a window
+chrome.tabs.onMoved.addListener(async (tabId, moveInfo) => {
+    const settings = await loadSettings();
+    if (!settings.autoGroup) return;
+
+    debounceRegroup(moveInfo.windowId, 500);
+});
+
+// Monitor when tabs are detached from a window
+chrome.tabs.onDetached.addListener(async (tabId, detachInfo) => {
+    // When a tab is detached (possibly for split view), delay and regroup the original window
+    const settings = await loadSettings();
+    if (settings.autoGroup) {
+        debounceRegroup(detachInfo.oldWindowId, 1000);
+    }
+});
+
+// Periodic check to ensure all tabs are properly grouped
+// This catches edge cases like split view exit that might not fire events
+let periodicCheckInterval = null;
+
+async function startPeriodicGroupCheck() {
+    if (periodicCheckInterval) return;
+
+    periodicCheckInterval = setInterval(async () => {
+        const settings = await loadSettings();
+        if (!settings.autoGroup) return;
+
+        try {
+            const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
+            for (const window of windows) {
+                const tabs = await chrome.tabs.query({ windowId: window.id });
+                const ungroupedTabs = tabs.filter(t =>
+                    !t.pinned &&
+                    t.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE &&
+                    getDomainName(t.url) !== 'Chrome' &&
+                    getDomainName(t.url) !== 'Other'
+                );
+
+                // If there are ungrouped tabs, trigger a regroup
+                if (ungroupedTabs.length > 0) {
+                    await groupTabsByDomain(window.id);
+                }
+            }
+        } catch (e) {
+            console.error('Periodic group check error:', e);
+        }
+    }, 3000); // Check every 3 seconds
+}
+
+// Start periodic check when extension loads
+startPeriodicGroupCheck();
 
 // Extension install/update handler
 chrome.runtime.onInstalled.addListener(async (details) => {
     if (details.reason === 'install') {
-        // Set default settings
+        // Set default settings with autoGroup ON for better UX
         await saveSettings({
-            autoGroup: false,
+            autoGroup: true,
             collapseByDefault: false,
             groupSingleTabs: false
         });
         console.log('Tab Manager Pro installed successfully!');
+
+        // Group existing tabs on install
+        const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
+        for (const window of windows) {
+            await groupTabsByDomain(window.id);
+        }
     }
 });
 
-console.log('Tab Manager Pro background service worker loaded');
+// Listen for settings changes to start/stop periodic check
+chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.tabManagerSettings) {
+        const newSettings = changes.tabManagerSettings.newValue;
+        if (newSettings && newSettings.autoGroup) {
+            startPeriodicGroupCheck();
+        }
+    }
+});
+
+console.log('Tab Manager Pro background service worker loaded with continuous monitoring');
+
