@@ -207,6 +207,13 @@ async function getOrganizedTabs(windowId = chrome.windows.WINDOW_ID_CURRENT) {
         const splitViewTabs = [];
 
         for (const tab of tabs) {
+            // Skip chrome internal URLs
+            if (tab.url && (tab.url.startsWith('chrome://') ||
+                tab.url.startsWith('chrome-extension://') ||
+                tab.url.startsWith('about:'))) {
+                continue;
+            }
+
             const domain = getDomainName(tab.url);
 
             const tabInfo = {
