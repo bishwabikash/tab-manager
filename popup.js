@@ -239,7 +239,7 @@ document.addEventListener('DOMContentLoaded', async () => {
    */
   function createTabItem(tab, showSplitBadge = false, searchQuery = '') {
     const favicon = tab.favIconUrl
-      ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="" onerror="this.style.display='none'">`
+      ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="">`
       : getFaviconPlaceholder();
 
     const activeClass = tab.active ? 'active' : '';
@@ -324,6 +324,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const tabId = parseInt(item.dataset.tabId);
         await chrome.tabs.update(tabId, { active: true });
         window.close();
+      });
+    });
+
+    // Handle favicon load errors
+    container.querySelectorAll('.tab-favicon').forEach(img => {
+      img.addEventListener('error', () => {
+        img.style.display = 'none';
       });
     });
   }
@@ -482,7 +489,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       recentlyClosedList.innerHTML = closedTabs.map(tab => `
         <div class="tab-item" data-session-id="${tab.sessionId}" title="${escapeHtml(tab.title)}">
-          ${tab.favIconUrl ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="" onerror="this.style.display='none'">` : getFaviconPlaceholder()}
+          ${tab.favIconUrl ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="">` : getFaviconPlaceholder()}
           <span class="tab-title">${escapeHtml(tab.title || 'Untitled')}</span>
           <button class="restore-btn" data-session-id="${tab.sessionId}">Restore</button>
         </div>
@@ -496,6 +503,13 @@ document.addEventListener('DOMContentLoaded', async () => {
           await chrome.sessions.restore(sessionId);
           await loadRecentlyClosed();
           await loadTabs();
+        });
+      });
+
+      // Handle favicon load errors
+      recentlyClosedList.querySelectorAll('.tab-favicon').forEach(img => {
+        img.addEventListener('error', () => {
+          img.style.display = 'none';
         });
       });
     } catch (error) {
