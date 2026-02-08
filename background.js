@@ -292,7 +292,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // Debounce helper to prevent excessive regrouping
 let regroupDebounceTimer = null;
-function debounceRegroup(windowId, delay = 500) {
+function debounceRegroup(windowId, delay = 100) {
     if (regroupDebounceTimer) {
         clearTimeout(regroupDebounceTimer);
     }
@@ -355,7 +355,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     // Regroup when URL changes (navigation) or when page completes loading
     if (changeInfo.url || changeInfo.status === 'complete') {
         // Use debounce to handle rapid changes
-        debounceRegroup(tab.windowId, 300);
+        debounceRegroup(tab.windowId, 50);
     }
 });
 
@@ -379,14 +379,14 @@ chrome.tabs.onAttached.addListener(async (tabId, attachInfo) => {
     if (!settings.autoGroup) return;
 
     // Delay slightly to let Chrome finish the attach operation
-    setTimeout(async () => {
+    setTimeout(async () => {  // 50ms delay for Chrome to finish
         try {
             const tab = await chrome.tabs.get(tabId);
             await ensureTabGrouped(tab);
         } catch (e) {
             // Tab might have been closed
         }
-    }, 200);
+    }, 50);
 });
 
 // Monitor when tabs are moved within a window
@@ -394,7 +394,7 @@ chrome.tabs.onMoved.addListener(async (tabId, moveInfo) => {
     const settings = await loadSettings();
     if (!settings.autoGroup) return;
 
-    debounceRegroup(moveInfo.windowId, 500);
+    debounceRegroup(moveInfo.windowId, 100);
 });
 
 // Monitor when tabs are detached from a window
@@ -402,7 +402,7 @@ chrome.tabs.onDetached.addListener(async (tabId, detachInfo) => {
     // When a tab is detached (possibly for split view), delay and regroup the original window
     const settings = await loadSettings();
     if (settings.autoGroup) {
-        debounceRegroup(detachInfo.oldWindowId, 1000);
+        debounceRegroup(detachInfo.oldWindowId, 200);
     }
 });
 
@@ -436,7 +436,7 @@ async function startPeriodicGroupCheck() {
         } catch (e) {
             console.error('Periodic group check error:', e);
         }
-    }, 3000); // Check every 3 seconds
+    }, 500); // Check every 500ms for near-instant response
 }
 
 // Start periodic check when extension loads
