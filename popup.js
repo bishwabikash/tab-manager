@@ -238,7 +238,9 @@ document.addEventListener('DOMContentLoaded', async () => {
    * Create HTML for a single tab item with optional search highlighting
    */
   function createTabItem(tab, showSplitBadge = false, searchQuery = '') {
-    const favicon = tab.favIconUrl
+    // Filter out chrome:// URLs for favicons (can't load internal resources)
+    const validFavicon = tab.favIconUrl && !tab.favIconUrl.startsWith('chrome://');
+    const favicon = validFavicon
       ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="">`
       : getFaviconPlaceholder();
 
@@ -487,13 +489,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
 
-      recentlyClosedList.innerHTML = closedTabs.map(tab => `
-        <div class="tab-item" data-session-id="${tab.sessionId}" title="${escapeHtml(tab.title)}">
-          ${tab.favIconUrl ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="">` : getFaviconPlaceholder()}
-          <span class="tab-title">${escapeHtml(tab.title || 'Untitled')}</span>
-          <button class="restore-btn" data-session-id="${tab.sessionId}">Restore</button>
-        </div>
-      `).join('');
+      recentlyClosedList.innerHTML = closedTabs.map(tab => {
+        const validFavicon = tab.favIconUrl && !tab.favIconUrl.startsWith('chrome://');
+        return `
+          <div class="tab-item" data-session-id="${tab.sessionId}" title="${escapeHtml(tab.title)}">
+            ${validFavicon ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="">` : getFaviconPlaceholder()}
+            <span class="tab-title">${escapeHtml(tab.title || 'Untitled')}</span>
+            <button class="restore-btn" data-session-id="${tab.sessionId}">Restore</button>
+          </div>
+        `;
+      }).join('');
 
       // Attach restore listeners
       recentlyClosedList.querySelectorAll('.restore-btn').forEach(btn => {
