@@ -168,10 +168,17 @@ async function groupTabsByDomain(windowId = chrome.windows.WINDOW_ID_CURRENT) {
 
 /**
  * Ungroup all tabs in the current window
+ * Also disables auto-group to prevent immediate re-grouping
  * @param {number} windowId - Optional window ID
  */
 async function ungroupAllTabs(windowId = chrome.windows.WINDOW_ID_CURRENT) {
     try {
+        // Disable auto-group to prevent immediate re-grouping
+        const settings = await loadSettings();
+        settings.autoGroup = false;
+        await saveSettings(settings);
+        invalidateSettingsCache();
+
         const tabs = await chrome.tabs.query({ windowId });
         const groupedTabs = tabs.filter(tab => tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE);
 
@@ -179,12 +186,13 @@ async function ungroupAllTabs(windowId = chrome.windows.WINDOW_ID_CURRENT) {
             await chrome.tabs.ungroup(tab.id);
         }
 
-        return { success: true };
+        return { success: true, message: 'Tabs ungrouped. Auto-group disabled.' };
     } catch (error) {
         console.error('Error ungrouping tabs:', error);
         return { success: false, error: error.message };
     }
 }
+
 
 /**
  * Get all tabs organized by domain
