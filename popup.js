@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', async () => {
    */
   function createTabItem(tab, showSplitBadge = false) {
     const favicon = tab.favIconUrl
-      ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="" onerror="this.outerHTML='${getFaviconPlaceholder()}'">`
+      ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="" onerror="this.style.display='none'">`
       : getFaviconPlaceholder();
 
     const activeClass = tab.active ? 'active' : '';
@@ -228,7 +228,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       Grouping...
     `;
 
+    // Enable auto-group when manually grouping (for consistency)
+    const settings = await sendMessage('loadSettings');
+    settings.autoGroup = true;
+    await sendMessage('saveSettings', { settings });
+
     await sendMessage('groupTabs');
+    await loadSettings();
     await loadTabs();
 
     groupAllBtn.disabled = false;

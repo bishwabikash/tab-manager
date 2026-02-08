@@ -7,18 +7,18 @@
   --bg-tertiary: #242432;
   --bg-glass: rgba(30, 30, 45, 0.7);
   --bg-glass-hover: rgba(40, 40, 60, 0.8);
-  
+
   --text-primary: #ffffff;
   --text-secondary: #a0a0b0;
   --text-muted: #666680;
-  
+
   --accent-primary: #6366f1;
   --accent-secondary: #8b5cf6;
   --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  
+
   --border-color: rgba(255, 255, 255, 0.08);
   --border-glow: rgba(99, 102, 241, 0.3);
-  
+
   /* Group colors */
   --group-grey: #6b7280;
   --group-blue: #3b82f6;
@@ -29,20 +29,20 @@
   --group-purple: #a855f7;
   --group-cyan: #06b6d4;
   --group-orange: #f97316;
-  
+
   /* Spacing */
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 12px;
   --spacing-lg: 16px;
   --spacing-xl: 24px;
-  
+
   /* Radius */
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-full: 50%;
-  
+
   /* Transitions */
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s ease;
@@ -168,6 +168,13 @@ body {
   border-color: var(--border-glow);
 }
 
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
 /* Settings */
 .settings-section {
   padding: var(--spacing-md) var(--spacing-lg);
@@ -208,12 +215,12 @@ body {
   transition: all var(--transition-normal);
 }
 
-.toggle-input:checked + .toggle-switch {
+.toggle-input:checked+.toggle-switch {
   background: var(--accent-primary);
   border-color: var(--accent-primary);
 }
 
-.toggle-input:checked + .toggle-switch::after {
+.toggle-input:checked+.toggle-switch::after {
   left: 20px;
   background: white;
 }
@@ -420,15 +427,41 @@ body {
 }
 
 /* Color utilities */
-.color-grey { background-color: var(--group-grey); }
-.color-blue { background-color: var(--group-blue); }
-.color-red { background-color: var(--group-red); }
-.color-yellow { background-color: var(--group-yellow); }
-.color-green { background-color: var(--group-green); }
-.color-pink { background-color: var(--group-pink); }
-.color-purple { background-color: var(--group-purple); }
-.color-cyan { background-color: var(--group-cyan); }
-.color-orange { background-color: var(--group-orange); }
+.color-grey {
+  background-color: var(--group-grey);
+}
+
+.color-blue {
+  background-color: var(--group-blue);
+}
+
+.color-red {
+  background-color: var(--group-red);
+}
+
+.color-yellow {
+  background-color: var(--group-yellow);
+}
+
+.color-green {
+  background-color: var(--group-green);
+}
+
+.color-pink {
+  background-color: var(--group-pink);
+}
+
+.color-purple {
+  background-color: var(--group-purple);
+}
+
+.color-cyan {
+  background-color: var(--group-cyan);
+}
+
+.color-orange {
+  background-color: var(--group-orange);
+}
 
 /* Loading */
 .loading {
@@ -452,7 +485,9 @@ body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Empty state */
@@ -485,8 +520,15 @@ body {
 
 /* Animations */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .domain-group {
