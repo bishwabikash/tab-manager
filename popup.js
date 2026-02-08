@@ -106,7 +106,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     domainList.innerHTML = domains.map(domain => `
-      <div class="domain-group" data-domain="${escapeHtml(domain.name)}">
+      <div class="domain-group collapsed" data-domain="${escapeHtml(domain.name)}">
         <div class="domain-header">
           <div class="domain-info">
             <span class="domain-color color-${domain.color}"></span>
