@@ -19,7 +19,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const duplicateList = document.getElementById('duplicateList');
   const duplicateCount = document.getElementById('duplicateCount');
   const closeDuplicatesBtn = document.getElementById('closeDuplicatesBtn');
-  const recentlyClosedSection = document.getElementById('recentlyClosedSection');
   const recentlyClosedList = document.getElementById('recentlyClosedList');
 
   // Tab navigation
@@ -465,15 +464,22 @@ document.addEventListener('DOMContentLoaded', async () => {
    */
   async function loadRecentlyClosed() {
     try {
-      const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 5 });
+      const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 10 });
       const closedTabs = sessions.filter(s => s.tab).map(s => s.tab);
 
       if (closedTabs.length === 0) {
-        recentlyClosedSection.style.display = 'none';
+        recentlyClosedList.innerHTML = `
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 8v4M12 16h.01"/>
+            </svg>
+            <p>No recently closed tabs</p>
+          </div>
+        `;
         return;
       }
 
-      recentlyClosedSection.style.display = 'block';
       recentlyClosedList.innerHTML = closedTabs.map(tab => `
         <div class="tab-item" data-session-id="${tab.sessionId}" title="${escapeHtml(tab.title)}">
           ${tab.favIconUrl ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="" onerror="this.style.display='none'">` : getFaviconPlaceholder()}
@@ -494,7 +500,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
     } catch (error) {
       console.error('Error loading recently closed tabs:', error);
-      recentlyClosedSection.style.display = 'none';
+      recentlyClosedList.innerHTML = `
+        <div class="empty-state">
+          <p>Unable to load history</p>
+        </div>
+      `;
     }
   }
 
