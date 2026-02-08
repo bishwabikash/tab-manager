@@ -111,8 +111,16 @@ async function groupTabsByDomain(windowId = chrome.windows.WINDOW_ID_CURRENT) {
         // Query all tabs in the specified window
         const tabs = await chrome.tabs.query({ windowId });
 
-        // Skip pinned tabs and group the rest
-        const unpinnedTabs = tabs.filter(tab => !tab.pinned);
+        // Skip pinned tabs and chrome internal tabs
+        const unpinnedTabs = tabs.filter(tab => {
+            if (tab.pinned) return false;
+            if (!tab.url) return false;
+            if (tab.url.startsWith('chrome://')) return false;
+            if (tab.url.startsWith('chrome-extension://')) return false;
+            if (tab.url.startsWith('about:')) return false;
+            if (tab.url.startsWith('edge://')) return false;
+            return true;
+        });
 
         // Organize tabs by domain
         const domainTabs = new Map();
@@ -437,6 +445,13 @@ function debounceRegroup(windowId, delay = 100) {
 // Lightweight single-tab grouping
 async function ensureTabGrouped(tab) {
     if (!tab || tab.pinned) return;
+
+    // Skip chrome internal tabs
+    if (!tab.url) return;
+    if (tab.url.startsWith('chrome://')) return;
+    if (tab.url.startsWith('chrome-extension://')) return;
+    if (tab.url.startsWith('about:')) return;
+    if (tab.url.startsWith('edge://')) return;
 
     const settings = await getCachedSettings();
     if (!settings.autoGroup) return;
