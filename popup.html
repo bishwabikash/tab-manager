@@ -24,121 +24,143 @@
             <div class="tab-count" id="tabCount">0 tabs</div>
         </header>
 
-        <!-- Search Bar -->
-        <div class="search-section">
-            <div class="search-wrapper">
-                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="M21 21l-4.35-4.35" />
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <button class="tab-nav-btn active" data-tab="tabs">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <rect x="14" y="14" width="7" height="7" rx="1" />
                 </svg>
-                <input type="text" id="searchInput" class="search-input" placeholder="Search tabs...">
-                <button class="search-clear" id="searchClear" style="display: none;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M18 6L6 18M6 6l12 12" />
+                Tabs
+            </button>
+            <button class="tab-nav-btn" data-tab="history">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12,6 12,12 16,14" />
+                </svg>
+                History
+            </button>
+        </nav>
+
+        <!-- Tabs Panel -->
+        <div class="tab-panel active" id="tabsPanel">
+            <!-- Search Bar -->
+            <div class="search-section">
+                <div class="search-wrapper">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="M21 21l-4.35-4.35" />
                     </svg>
-                </button>
+                    <input type="text" id="searchInput" class="search-input" placeholder="Search tabs...">
+                    <button class="search-clear" id="searchClear" style="display: none;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
             </div>
-        </div>
 
-        <!-- Action Buttons -->
-        <div class="actions">
-            <button class="btn btn-primary" id="groupAllBtn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 5v14M5 12h14" />
-                </svg>
-                Group All
-            </button>
-            <button class="btn btn-secondary" id="ungroupAllBtn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M5 12h14" />
-                </svg>
-                Ungroup
-            </button>
-            <button class="btn btn-secondary" id="findDuplicatesBtn" title="Find Duplicates">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="8" y="8" width="12" height="12" rx="2" />
-                    <path d="M4 16V4h12" />
-                </svg>
-            </button>
-        </div>
-
-        <!-- Settings Toggle -->
-        <div class="settings-section">
-            <label class="toggle-label">
-                <input type="checkbox" id="autoGroupToggle" class="toggle-input">
-                <span class="toggle-switch"></span>
-                <span class="toggle-text">Auto-group new tabs</span>
-            </label>
-        </div>
-
-        <!-- Duplicates Section (hidden by default) -->
-        <section class="duplicates-section" id="duplicatesSection" style="display: none;">
-            <div class="section-header">
-                <h2>
+            <!-- Action Buttons -->
+            <div class="actions">
+                <button class="btn btn-primary" id="groupAllBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    Group
+                </button>
+                <button class="btn btn-secondary" id="ungroupAllBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14" />
+                    </svg>
+                    Ungroup
+                </button>
+                <button class="btn btn-secondary" id="findDuplicatesBtn" title="Find Duplicates">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="8" y="8" width="12" height="12" rx="2" />
                         <path d="M4 16V4h12" />
                     </svg>
-                    Duplicate Tabs
-                    <span class="duplicate-count" id="duplicateCount">0</span>
-                </h2>
-                <button class="btn-text" id="closeDuplicatesBtn">Close All Duplicates</button>
+                </button>
             </div>
-            <div class="duplicate-list" id="duplicateList"></div>
-        </section>
 
-        <!-- Recently Closed Section -->
-        <section class="recently-closed-section" id="recentlyClosedSection" style="display: none;">
-            <div class="section-header">
-                <h2>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12,6 12,12 16,14" />
-                    </svg>
-                    Recently Closed
-                </h2>
+            <!-- Settings Toggle -->
+            <div class="settings-section">
+                <label class="toggle-label">
+                    <input type="checkbox" id="autoGroupToggle" class="toggle-input">
+                    <span class="toggle-switch"></span>
+                    <span class="toggle-text">Auto-group new tabs</span>
+                </label>
             </div>
-            <div class="tab-list" id="recentlyClosedList"></div>
-        </section>
 
-        <!-- Split View Section -->
-        <section class="split-view-section" id="splitViewSection" style="display: none;">
-            <div class="section-header">
-                <h2>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="2" y="3" width="20" height="18" rx="2" />
-                        <path d="M12 3v18" />
-                    </svg>
-                    Split View
-                </h2>
-            </div>
-            <div class="tab-list" id="splitViewTabs"></div>
-        </section>
-
-        <!-- Tab Groups Section -->
-        <section class="tabs-section">
-            <div class="section-header">
-                <h2>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="7" height="7" rx="1" />
-                        <rect x="14" y="3" width="7" height="7" rx="1" />
-                        <rect x="3" y="14" width="7" height="7" rx="1" />
-                        <rect x="14" y="14" width="7" height="7" rx="1" />
-                    </svg>
-                    Tabs by Domain
-                </h2>
-            </div>
-            <div id="domainList" class="domain-list">
-                <div class="loading">
-                    <div class="spinner"></div>
-                    Loading tabs...
+            <!-- Duplicates Section (hidden by default) -->
+            <section class="duplicates-section" id="duplicatesSection" style="display: none;">
+                <div class="section-header">
+                    <h2>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="8" y="8" width="12" height="12" rx="2" />
+                            <path d="M4 16V4h12" />
+                        </svg>
+                        Duplicates
+                        <span class="duplicate-count" id="duplicateCount">0</span>
+                    </h2>
+                    <button class="btn-text" id="closeDuplicatesBtn">Close All</button>
                 </div>
-            </div>
-        </section>
+                <div class="duplicate-list" id="duplicateList"></div>
+            </section>
 
-        <!-- Footer with keyboard shortcut hint -->
+            <!-- Split View Section -->
+            <section class="split-view-section" id="splitViewSection" style="display: none;">
+                <div class="section-header">
+                    <h2>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="3" width="20" height="18" rx="2" />
+                            <path d="M12 3v18" />
+                        </svg>
+                        Split View
+                    </h2>
+                </div>
+                <div class="tab-list" id="splitViewTabs"></div>
+            </section>
+
+            <!-- Tab Groups Section -->
+            <section class="tabs-section">
+                <div id="domainList" class="domain-list">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        Loading tabs...
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- History Panel -->
+        <div class="tab-panel" id="historyPanel">
+            <section class="history-section">
+                <div class="section-header">
+                    <h2>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12,6 12,12 16,14" />
+                        </svg>
+                        Recently Closed
+                    </h2>
+                </div>
+                <div class="tab-list" id="recentlyClosedList">
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M12 8v4M12 16h.01" />
+                        </svg>
+                        <p>No recently closed tabs</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Footer -->
         <footer class="footer">
-            <span>Ctrl+Shift+G to group • Ctrl+Shift+U to ungroup</span>
+            <span>Ctrl+Shift+G group • Ctrl+Shift+U ungroup</span>
         </footer>
     </div>
 

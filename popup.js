@@ -22,6 +22,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const recentlyClosedSection = document.getElementById('recentlyClosedSection');
   const recentlyClosedList = document.getElementById('recentlyClosedList');
 
+  // Tab navigation
+  const tabNavBtns = document.querySelectorAll('.tab-nav-btn');
+  const tabsPanel = document.getElementById('tabsPanel');
+  const historyPanel = document.getElementById('historyPanel');
+
   // Store all tabs data for search filtering
   let allTabsData = null;
   let currentSearchQuery = '';
@@ -29,7 +34,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load settings and tabs on popup open
   await loadSettings();
   await loadTabs();
-  await loadRecentlyClosed();
 
   // Event Listeners
   groupAllBtn.addEventListener('click', handleGroupAll);
@@ -41,6 +45,29 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Search functionality
   searchInput.addEventListener('input', handleSearch);
   searchClear.addEventListener('click', clearSearch);
+
+  // Tab navigation
+  tabNavBtns.forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  /**
+   * Switch between Tabs and History panels
+   */
+  function switchTab(tabName) {
+    tabNavBtns.forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+    tabsPanel.classList.remove('active');
+    historyPanel.classList.remove('active');
+
+    if (tabName === 'tabs') {
+      tabsPanel.classList.add('active');
+    } else {
+      historyPanel.classList.add('active');
+      loadRecentlyClosed(); // Load when switching to history
+    }
+  }
 
   /**
    * Send message to background script
