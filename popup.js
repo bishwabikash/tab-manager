@@ -369,12 +369,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadTabs();
 
     groupAllBtn.disabled = false;
+    // Show success checkmark
     groupAllBtn.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 5v14M5 12h14"/>
+        <polyline points="20 6 9 17 4 12"></polyline>
       </svg>
-      Group All
     `;
+
+    // Revert to original icon after 2 seconds
+    setTimeout(() => {
+      groupAllBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+      `;
+    }, 2000);
   }
 
   /**
@@ -394,12 +403,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadTabs();
 
     ungroupAllBtn.disabled = false;
+    // Show success checkmark
     ungroupAllBtn.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M5 12h14"/>
+        <polyline points="20 6 9 17 4 12"></polyline>
       </svg>
-      Ungroup
     `;
+
+    // Revert to original icon after 2 seconds
+    setTimeout(() => {
+      ungroupAllBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12h14"/>
+        </svg>
+      `;
+    }, 2000);
   }
 
   /**

@@ -1,7 +1,7 @@
 /* Tab Manager Pro - Material Design 3 Theme */
 /* Google-compliant modern UI */
 
-@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cookie&family=Google+Sans:wght@400;500;600&display=swap');
 
 :root {
   /* Material Design 3 Color Tokens - Dark Theme */
@@ -70,9 +70,9 @@ body {
   font: var(--md-sys-typescale-body-medium);
   background: var(--md-sys-color-surface);
   color: var(--md-sys-color-on-surface);
-  width: 360px;
-  min-height: 400px;
-  max-height: 520px;
+  width: 320px;
+  min-height: 350px;
+  max-height: 480px;
   overflow: hidden;
 }
 
@@ -184,51 +184,41 @@ body {
 /* Actions - Material Buttons */
 .actions {
   display: flex;
-  gap: 8px;
-  padding: 12px 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
   background: var(--md-sys-color-surface-container);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
 }
 
 .btn {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 16px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   border: none;
   border-radius: var(--md-sys-shape-corner-full);
-  font: var(--md-sys-typescale-label-large);
   cursor: pointer;
   transition: all var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
-}
-
-.btn svg {
-  width: 18px;
-  height: 18px;
-}
-
-.btn-primary {
-  background: var(--md-sys-color-primary);
-  color: var(--md-sys-color-on-primary);
-}
-
-.btn-primary:hover {
-  box-shadow: var(--md-sys-elevation-1);
-  filter: brightness(1.1);
-}
-
-.btn-primary:active {
-  filter: brightness(0.95);
-}
-
-.btn-secondary {
   background: var(--md-sys-color-surface-container-high);
   color: var(--md-sys-color-on-surface);
 }
 
-.btn-secondary:hover {
+.btn:hover {
   background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-primary);
+}
+
+.btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .btn:disabled {
@@ -236,19 +226,12 @@ body {
   cursor: not-allowed;
 }
 
-/* Settings - Material Switch */
-.settings-section {
-  padding: 8px 16px;
-  background: var(--md-sys-color-surface-container);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
-}
-
+/* Toggle Switch */
 .toggle-label {
   display: flex;
   align-items: center;
-  gap: 12px;
   cursor: pointer;
-  padding: 4px 0;
+  padding: 4px;
 }
 
 .toggle-input {
@@ -257,8 +240,8 @@ body {
 
 .toggle-switch {
   position: relative;
-  width: 52px;
-  height: 32px;
+  width: 40px;
+  height: 24px;
   background: var(--md-sys-color-surface-container-highest);
   border-radius: var(--md-sys-shape-corner-full);
   border: 2px solid var(--md-sys-color-outline);
@@ -268,10 +251,10 @@ body {
 .toggle-switch::after {
   content: '';
   position: absolute;
-  top: 6px;
-  left: 6px;
-  width: 16px;
-  height: 16px;
+  top: 4px;
+  left: 4px;
+  width: 12px;
+  height: 12px;
   background: var(--md-sys-color-outline);
   border-radius: var(--md-sys-shape-corner-full);
   transition: all var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
@@ -283,17 +266,14 @@ body {
 }
 
 .toggle-input:checked+.toggle-switch::after {
-  left: 26px;
-  width: 24px;
-  height: 24px;
+  left: 20px;
+  width: 16px;
+  height: 16px;
   top: 2px;
   background: var(--md-sys-color-on-primary);
 }
 
-.toggle-text {
-  font: var(--md-sys-typescale-body-medium);
-  color: var(--md-sys-color-on-surface);
-}
+
 
 /* Section Headers */
 .section-header {
@@ -600,13 +580,49 @@ body {
 }
 
 /* Footer */
+/* Footer */
+
+/* ... (rest of the file until footer) ... */
+
+/* Footer */
 .footer {
-  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
   text-align: center;
   font: var(--md-sys-typescale-body-small);
   color: var(--md-sys-color-on-surface-variant);
   background: var(--md-sys-color-surface-container);
   border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.bmc-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #FFDD00;
+  color: #000000;
+  border-radius: var(--md-sys-shape-corner-full);
+  text-decoration: none;
+  font-family: 'Cookie', cursive;
+  font-size: 22px;
+  line-height: 1;
+  transition: all var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+  box-shadow: var(--md-sys-elevation-1);
+}
+
+.bmc-button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--md-sys-elevation-2);
+}
+
+.bmc-button svg {
+  width: 20px;
+  height: 20px;
 }
 
 /* Animations */
