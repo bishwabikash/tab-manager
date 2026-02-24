@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Tab Manager Pro",
-  "version": "1.3.0",
-  "description": "Organize tabs by domain with automatic grouping, search, duplicate detection, and split view support",
+  "version": "1.4.0",
+  "description": "Organize tabs by domain with automatic grouping, search, and duplicate detection — compatible with Chrome and Brave",
   "permissions": [
     "tabs",
     "tabGroups",
