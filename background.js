@@ -107,12 +107,12 @@ function getDomainColor(domain) {
  * Group all tabs in the current window by domain
  * @param {number} windowId - Optional window ID (defaults to current window)
  */
-async function groupTabsByDomain(windowId = chrome.windows.WINDOW_ID_CURRENT) {
+async function groupTabsByDomain(windowId) {
     try {
         // Query all tabs in the specified window
         const tabs = await chrome.tabs.query({ windowId });
 
-        // Skip pinned tabs and chrome internal tabs
+        // Skip pinned tabs and all browser-internal URLs
         const unpinnedTabs = tabs.filter(tab => {
             if (tab.pinned) return false;
             if (!tab.url) return false;
@@ -120,6 +120,7 @@ async function groupTabsByDomain(windowId = chrome.windows.WINDOW_ID_CURRENT) {
             if (tab.url.startsWith('chrome-extension://')) return false;
             if (tab.url.startsWith('about:')) return false;
             if (tab.url.startsWith('edge://')) return false;
+            if (tab.url.startsWith('brave://')) return false;
             return true;
         });
 
@@ -128,6 +129,9 @@ async function groupTabsByDomain(windowId = chrome.windows.WINDOW_ID_CURRENT) {
 
         for (const tab of unpinnedTabs) {
             const domain = getDomainName(tab.url);
+            // Skip pseudo-domains that cannot be meaningfully grouped
+            if (!domain || domain === 'Other' || domain === 'Chrome' ||
+                domain === 'Browser' || domain === 'Edge' || domain === 'Brave') continue;
             if (!domainTabs.has(domain)) {
                 domainTabs.set(domain, []);
             }
@@ -145,26 +149,34 @@ async function groupTabsByDomain(windowId = chrome.windows.WINDOW_ID_CURRENT) {
 
         // Create or update groups for each domain
         for (const [domain, domainTabsList] of domainTabs) {
-            // Skip if only one tab (no need to group single tabs)
-            if (domainTabsList.length < 1) continue;
+            // Only group domains with 2+ tabs
+            if (domainTabsList.length < 2) continue;
 
             const tabIds = domainTabsList.map(t => t.id);
             const color = getDomainColor(domain);
 
-            // Check if a group with this title already exists
+            // Check if a group with this title already exists — reuse it
             const existingGroup = groupByTitle.get(domain);
 
             if (existingGroup) {
-                // Add tabs to existing group
+                // Add tabs to existing group (title/color already set)
                 await chrome.tabs.group({ tabIds, groupId: existingGroup.id });
             } else {
-                // Create new group
-                const groupId = await chrome.tabs.group({ tabIds });
-                await chrome.tabGroups.update(groupId, {
-                    title: domain,
-                    color: color,
-                    collapsed: false
+                // Create new group — pass windowId explicitly via createProperties.
+                // Per official docs this is required; relying on SW "current window" is unreliable.
+                const groupId = await chrome.tabs.group({
+                    tabIds,
+                    createProperties: { windowId }
                 });
+                try {
+                    await chrome.tabGroups.update(groupId, {
+                        title: domain,
+                        color: color,
+                        collapsed: false
+                    });
+                } catch (updateErr) {
+                    console.error(`[Tab Manager] Failed to set title "${domain}" on group ${groupId}:`, updateErr);
+                }
             }
         }
 
@@ -174,6 +186,7 @@ async function groupTabsByDomain(windowId = chrome.windows.WINDOW_ID_CURRENT) {
         return { success: false, error: error.message };
     }
 }
+
 
 /**
  * Ungroup all tabs in the current window
@@ -464,18 +477,20 @@ function debounceRegroup(windowId, delay = 100) {
 async function ensureTabGrouped(tab) {
     if (!tab || tab.pinned) return;
 
-    // Skip chrome internal tabs
+    // Skip all browser-internal URLs
     if (!tab.url) return;
     if (tab.url.startsWith('chrome://')) return;
     if (tab.url.startsWith('chrome-extension://')) return;
     if (tab.url.startsWith('about:')) return;
     if (tab.url.startsWith('edge://')) return;
+    if (tab.url.startsWith('brave://')) return;
 
     const settings = await getCachedSettings();
     if (!settings.autoGroup) return;
 
     const domain = getDomainName(tab.url);
-    if (domain === 'Chrome' || domain === 'Other') return;
+    if (!domain || domain === 'Chrome' || domain === 'Other' ||
+        domain === 'Browser' || domain === 'Edge' || domain === 'Brave') return;
 
     // Only process if tab is ungrouped
     if (tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE) return;
@@ -495,12 +510,20 @@ async function ensureTabGrouped(tab) {
 
         if (sameDomainTabs.length > 1) {
             const tabIds = sameDomainTabs.map(t => t.id);
-            const groupId = await chrome.tabs.group({ tabIds });
-            await chrome.tabGroups.update(groupId, {
-                title: domain,
-                color: getDomainColor(domain),
-                collapsed: false
+            // Pass createProperties.windowId explicitly — avoids SW "current window" ambiguity
+            const groupId = await chrome.tabs.group({
+                tabIds,
+                createProperties: { windowId: tab.windowId }
             });
+            try {
+                await chrome.tabGroups.update(groupId, {
+                    title: domain,
+                    color: getDomainColor(domain),
+                    collapsed: false
+                });
+            } catch (updateErr) {
+                console.error(`[Tab Manager] ensureTabGrouped: Failed to set title "${domain}":`, updateErr);
+            }
         }
     }
 }
