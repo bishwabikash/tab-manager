@@ -8,8 +8,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const groupAllBtn = document.getElementById('groupAllBtn');
   const ungroupAllBtn = document.getElementById('ungroupAllBtn');
   const autoGroupToggle = document.getElementById('autoGroupToggle');
-  const splitViewSection = document.getElementById('splitViewSection');
-  const splitViewTabs = document.getElementById('splitViewTabs');
+  // Split view removed — chrome.tabs.splitViewId API does not exist in Chrome/Brave
 
   // New elements
   const searchInput = document.getElementById('searchInput');
@@ -119,13 +118,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Update tab count
     tabCount.textContent = `${result.totalTabs} tab${result.totalTabs !== 1 ? 's' : ''}`;
 
-    // Handle split view tabs
-    if (result.splitViewTabs && result.splitViewTabs.length > 0) {
-      splitViewSection.style.display = 'block';
-      renderSplitViewTabs(result.splitViewTabs);
-    } else {
-      splitViewSection.style.display = 'none';
-    }
+    // Split view section removed — API does not exist
 
     // Render domain groups (with search filter if active)
     renderDomainGroups(result.domains, currentSearchQuery);
@@ -156,13 +149,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     searchInput.focus();
   }
 
-  /**
-   * Render split view tabs section
-   */
-  function renderSplitViewTabs(tabs) {
-    splitViewTabs.innerHTML = tabs.map(tab => createTabItem(tab, true)).join('');
-    attachTabClickListeners(splitViewTabs);
-  }
+  // renderSplitViewTabs removed — split view API does not exist
 
   /**
    * Render domain groups with optional search filter
@@ -491,10 +478,33 @@ document.addEventListener('DOMContentLoaded', async () => {
    */
   async function loadRecentlyClosed() {
     try {
-      const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 10 });
-      const closedTabs = sessions.filter(s => s.tab).map(s => s.tab);
+      const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 15 }); // Increased limit to account for window tabs
+      let closedItems = [];
 
-      if (closedTabs.length === 0) {
+      for (const session of sessions) {
+        if (session.tab) {
+          closedItems.push({
+            ...session.tab,
+            sessionId: session.tab.sessionId,
+            type: 'tab'
+          });
+        } else if (session.window && session.window.tabs) {
+          // Add all tabs from the closed window
+          session.window.tabs.forEach(tab => {
+            closedItems.push({
+              ...tab,
+              sessionId: session.window.sessionId, // Use window session ID for restoration
+              type: 'window',
+              windowId: session.window.id
+            });
+          });
+        }
+      }
+
+      // Limit display to 15 items
+      closedItems = closedItems.slice(0, 15);
+
+      if (closedItems.length === 0) {
         recentlyClosedList.innerHTML = `
           <div class="empty-state">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -507,13 +517,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
 
-      recentlyClosedList.innerHTML = closedTabs.map(tab => {
-        const validFavicon = tab.favIconUrl && !tab.favIconUrl.startsWith('chrome://');
+      recentlyClosedList.innerHTML = closedItems.map(item => {
+        const validFavicon = item.favIconUrl && !item.favIconUrl.startsWith('chrome://');
+        const isWindow = item.type === 'window';
+
         return `
-          <div class="tab-item" data-session-id="${tab.sessionId}" title="${escapeHtml(tab.title)}">
-            ${validFavicon ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="">` : getFaviconPlaceholder()}
-            <span class="tab-title">${escapeHtml(tab.title || 'Untitled')}</span>
-            <button class="restore-btn" data-session-id="${tab.sessionId}">Restore</button>
+          <div class="tab-item" data-session-id="${item.sessionId}" title="${escapeHtml(item.title)}">
+            ${validFavicon ? `<img class="tab-favicon" src="${escapeHtml(item.favIconUrl)}" alt="">` : getFaviconPlaceholder()}
+            <div class="tab-info" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;">
+              <span class="tab-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(item.title || 'Untitled')}</span>
+              ${isWindow ? `<span class="window-badge">Window</span>` : ''}
+            </div>
+            <button class="restore-btn" data-session-id="${item.sessionId}" title="${isWindow ? 'Restore entire window' : 'Restore tab'}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                <path d="M21 3v5h-5"></path>
+                <path d="M9 12a9 9 0 0 1 5.99-8.49" style="opacity: 0;"></path>
+              </svg>
+            </button>
           </div>
         `;
       }).join('');
@@ -539,6 +560,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.error('Error loading recently closed tabs:', error);
       recentlyClosedList.innerHTML = `
         <div class="empty-state">
+           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+           </svg>
           <p>Unable to load history</p>
         </div>
       `;

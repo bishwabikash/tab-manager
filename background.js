@@ -1,101 +1,5 @@
-// Tab Manager Pro - Background Service Worker
-// Handles tab grouping by domain and split view management
-
-// Color palette for tab groups
-const GROUP_COLORS = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange'];
-
-// Well-known domain mappings for better display names
-const DOMAIN_NAMES = {
-    'google': 'Google',
-    'youtube': 'YouTube',
-    'github': 'GitHub',
-    'stackoverflow': 'Stack Overflow',
-    'reddit': 'Reddit',
-    'twitter': 'Twitter',
-    'facebook': 'Facebook',
-    'instagram': 'Instagram',
-    'linkedin': 'LinkedIn',
-    'amazon': 'Amazon',
-    'netflix': 'Netflix',
-    'spotify': 'Spotify',
-    'microsoft': 'Microsoft',
-    'apple': 'Apple',
-    'discord': 'Discord',
-    'slack': 'Slack',
-    'notion': 'Notion',
-    'figma': 'Figma',
-    'dribbble': 'Dribbble',
-    'medium': 'Medium',
-    'dev': 'DEV',
-    'twitch': 'Twitch',
-    'pinterest': 'Pinterest',
-    'wikipedia': 'Wikipedia',
-    'quora': 'Quora'
-};
-
-/**
- * Extract a clean domain name from URL
- * @param {string} url - Full URL
- * @returns {string} Formatted domain name
- */
-function getDomainName(url) {
-    if (!url) return 'Other';
-
-    try {
-        const urlObj = new URL(url);
-        let hostname = urlObj.hostname;
-
-        // Handle special URLs
-        if (hostname === 'newtab' || url.startsWith('chrome://') || url.startsWith('chrome-extension://')) {
-            return 'Chrome';
-        }
-        if (url.startsWith('edge://')) return 'Edge';
-        if (url.startsWith('about:')) return 'Browser';
-
-        // Remove www prefix
-        hostname = hostname.replace(/^www\./, '');
-
-        // Extract the main domain parts
-        const parts = hostname.split('.');
-
-        // Handle common TLDs and get the main domain
-        let mainDomain = '';
-        if (parts.length >= 2) {
-            // Check for multi-part TLDs like .co.uk, .com.au
-            const lastTwo = parts.slice(-2).join('.');
-            if (['co.uk', 'com.au', 'co.in', 'co.jp', 'com.br', 'co.nz'].includes(lastTwo)) {
-                mainDomain = parts.length > 2 ? parts[parts.length - 3] : parts[0];
-            } else {
-                mainDomain = parts[parts.length - 2];
-            }
-        } else {
-            mainDomain = parts[0];
-        }
-
-        // Check if we have a known display name
-        const lowerDomain = mainDomain.toLowerCase();
-        if (DOMAIN_NAMES[lowerDomain]) {
-            return DOMAIN_NAMES[lowerDomain];
-        }
-
-        // Capitalize first letter
-        return mainDomain.charAt(0).toUpperCase() + mainDomain.slice(1).toLowerCase();
-    } catch (e) {
-        console.error('Error parsing URL:', e);
-        return 'Other';
-    }
-}
-
-/**
- * Get a consistent color for a domain based on hash
- * @param {string} domain - Domain name
- * @returns {string} Color name from GROUP_COLORS
- */
-function getDomainColor(domain) {
-    let hash = 0;
-    for (let i = 0; i < domain.length; i++) {
-        const char = domain.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
+{
+    {
         hash = hash & hash; // Convert to 32-bit integer
     }
     const index = Math.abs(hash) % GROUP_COLORS.length;
@@ -212,13 +116,16 @@ async function getOrganizedTabs(windowId = chrome.windows.WINDOW_ID_CURRENT) {
         const tabs = await chrome.tabs.query({ windowId });
 
         const domains = new Map();
-        const splitViewTabs = [];
 
         for (const tab of tabs) {
-            // Skip chrome internal URLs
-            if (tab.url && (tab.url.startsWith('chrome://') ||
+            // Skip all browser-internal URLs (Chrome, Brave, Edge, Firefox)
+            if (tab.url && (
+                tab.url.startsWith('chrome://') ||
                 tab.url.startsWith('chrome-extension://') ||
-                tab.url.startsWith('about:'))) {
+                tab.url.startsWith('about:') ||
+                tab.url.startsWith('edge://') ||
+                tab.url.startsWith('brave://')
+            )) {
                 continue;
             }
 
@@ -231,14 +138,9 @@ async function getOrganizedTabs(windowId = chrome.windows.WINDOW_ID_CURRENT) {
                 favIconUrl: tab.favIconUrl,
                 active: tab.active,
                 pinned: tab.pinned,
-                groupId: tab.groupId,
-                splitViewId: tab.splitViewId
+                groupId: tab.groupId
+                // splitViewId removed — chrome.tabs.splitViewId API does not exist
             };
-
-            // Check for split view (Chrome 145+)
-            if (tab.splitViewId && tab.splitViewId !== chrome.tabs.SPLIT_VIEW_ID_NONE) {
-                splitViewTabs.push(tabInfo);
-            }
 
             if (!domains.has(domain)) {
                 domains.set(domain, {
@@ -256,7 +158,6 @@ async function getOrganizedTabs(windowId = chrome.windows.WINDOW_ID_CURRENT) {
         return {
             success: true,
             domains: domainList,
-            splitViewTabs,
             totalTabs: tabs.length
         };
     } catch (error) {
@@ -320,14 +221,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // Keyboard shortcut handlers
+// Use getLastFocused() instead of WINDOW_ID_CURRENT
+// WINDOW_ID_CURRENT is undefined in a background service worker context.
 chrome.commands.onCommand.addListener(async (command) => {
-    switch (command) {
-        case 'group-all-tabs':
-            await groupTabsByDomain();
-            break;
-        case 'ungroup-all-tabs':
-            await ungroupAllTabs();
-            break;
+    try {
+        const win = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+        switch (command) {
+            case 'group-all-tabs':
+                await groupTabsByDomain(win.id);
+                break;
+            case 'ungroup-all-tabs':
+                await ungroupAllTabs(win.id);
+                break;
+        }
+    } catch (e) {
+        console.error('Keyboard shortcut error:', e);
     }
 });
 
@@ -343,7 +251,12 @@ async function findDuplicateTabs(windowId = chrome.windows.WINDOW_ID_CURRENT) {
 
         // Count occurrences of each URL
         for (const tab of tabs) {
-            if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+            if (!tab.url ||
+                tab.url.startsWith('chrome://') ||
+                tab.url.startsWith('chrome-extension://') ||
+                tab.url.startsWith('about:') ||
+                tab.url.startsWith('edge://') ||
+                tab.url.startsWith('brave://')) {
                 continue;
             }
 
@@ -507,16 +420,16 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     } catch (e) { /* Tab closed */ }
 });
 
+// onAttached: call ensureTabGrouped directly — tab already has a URL when this fires.
+// Using setTimeout here was unsafe (service worker can terminate mid-callback in MV3).
 chrome.tabs.onAttached.addListener(async (tabId, attachInfo) => {
     const settings = await getCachedSettings();
     if (!settings.autoGroup) return;
 
-    setTimeout(async () => {
-        try {
-            const tab = await chrome.tabs.get(tabId);
-            await ensureTabGrouped(tab);
-        } catch (e) { /* Tab closed */ }
-    }, 50);
+    try {
+        const tab = await chrome.tabs.get(tabId);
+        await ensureTabGrouped(tab);
+    } catch (e) { /* Tab closed */ }
 });
 
 chrome.tabs.onMoved.addListener(async (tabId, moveInfo) => {
@@ -533,22 +446,18 @@ chrome.tabs.onDetached.addListener(async (tabId, detachInfo) => {
 });
 
 // ============================================
-// SMART PERIODIC CHECK (only when needed)
+// SMART PERIODIC CHECK via chrome.alarms
+// chrome.alarms survive service worker restarts.
+// setInterval/clearInterval are reset when the SW wakes up again.
 // ============================================
 
-let periodicCheckInterval = null;
-
-function stopPeriodicCheck() {
-    if (periodicCheckInterval) {
-        clearInterval(periodicCheckInterval);
-        periodicCheckInterval = null;
-    }
-}
+const ALARM_NAME = 'periodic-regroup';
 
 async function runPeriodicCheck() {
     const settings = await getCachedSettings();
     if (!settings.autoGroup) {
-        stopPeriodicCheck();
+        // Settings changed while alarm was queued — just cancel and return.
+        await chrome.alarms.clear(ALARM_NAME);
         return;
     }
 
@@ -572,30 +481,46 @@ async function runPeriodicCheck() {
     } catch (e) { /* Window/tab closed during check */ }
 }
 
-function startPeriodicCheck() {
-    if (periodicCheckInterval) return;
-    periodicCheckInterval = setInterval(runPeriodicCheck, 500);
+async function startPeriodicCheck() {
+    // Avoid duplicate alarms
+    const existing = await chrome.alarms.get(ALARM_NAME);
+    if (existing) return;
+    // Minimum periodInMinutes is 0.5 (30 seconds) in MV3
+    chrome.alarms.create(ALARM_NAME, { periodInMinutes: 0.5 });
+    console.log('Tab Manager Pro: periodic alarm started (30s interval)');
 }
+
+async function stopPeriodicCheck() {
+    await chrome.alarms.clear(ALARM_NAME);
+    console.log('Tab Manager Pro: periodic alarm stopped');
+}
+
+// Handle alarm ticks
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === ALARM_NAME) {
+        runPeriodicCheck();
+    }
+});
 
 // ============================================
 // LIFECYCLE MANAGEMENT
 // ============================================
 
 // Listen for settings changes
-chrome.storage.onChanged.addListener((changes, areaName) => {
+chrome.storage.onChanged.addListener(async (changes, areaName) => {
     if (areaName === 'local' && changes.tabManagerSettings) {
         invalidateSettingsCache();
         const newSettings = changes.tabManagerSettings.newValue;
 
         if (newSettings?.autoGroup) {
-            startPeriodicCheck();
+            await startPeriodicCheck();
         } else {
-            stopPeriodicCheck();
+            await stopPeriodicCheck();
         }
     }
 });
 
-// Extension install handler
+// Extension install / update handler
 chrome.runtime.onInstalled.addListener(async (details) => {
     if (details.reason === 'install') {
         await saveSettings({
@@ -605,19 +530,29 @@ chrome.runtime.onInstalled.addListener(async (details) => {
         });
         invalidateSettingsCache();
 
+        // Start the periodic alarm on fresh install
+        await startPeriodicCheck();
+
         // Group existing tabs
         const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
         for (const win of windows) {
             await groupTabsByDomain(win.id);
         }
+    } else if (details.reason === 'update') {
+        // Re-register alarm on extension update (SW restarts on update)
+        const settings = await getCachedSettings();
+        if (settings.autoGroup) {
+            await startPeriodicCheck();
+        }
     }
 });
 
-// Initialize on load
+// Initialize on service worker startup
+// The alarm persists across SW restarts, but we re-register to be safe.
 (async () => {
     const settings = await getCachedSettings();
     if (settings.autoGroup) {
-        startPeriodicCheck();
+        await startPeriodicCheck();
     }
 })();
 
