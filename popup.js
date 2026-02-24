@@ -77,9 +77,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   let allTabsData = null;
   let currentSearchQuery = '';
 
-  // Capture real window ID at startup — service worker cannot use WINDOW_ID_CURRENT (-2)
-  // Without this, chrome.tabs.query & chrome.tabGroups.query in the SW return empty.
-  const { id: currentWindowId } = await chrome.windows.getCurrent();
+  // Get the BROWSER window ID — NOT the popup's own window.
+  // chrome.windows.getCurrent() from a popup returns the popup window itself
+  // (type 'popup'), NOT the browser window with the user's tabs.
+  // getLastFocused({windowTypes:['normal']}) explicitly returns the correct window.
+  const { id: currentWindowId } = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
 
   // Load settings and tabs in PARALLEL — direct API calls, no SW round-trip
   await Promise.all([loadSettings(), loadTabs()]);
@@ -147,7 +149,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     try {
-      const tabs = await chrome.tabs.query({ currentWindow: true });
+      const tabs = await chrome.tabs.query({ windowId: currentWindowId });
 
       const domainsMap = new Map();
 
