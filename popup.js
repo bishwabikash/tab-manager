@@ -1,5 +1,53 @@
 // Tab Manager Pro - Popup Script
-// Handles UI interactions and communication with background service worker
+// Direct chrome API calls — no background SW round-trips for reads.
+
+// ─── Domain helpers (mirrored from background.js) ────────────────────────────
+const GROUP_COLORS = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange'];
+
+const DOMAIN_NAMES = {
+  google: 'Google', youtube: 'YouTube', github: 'GitHub', stackoverflow: 'Stack Overflow',
+  reddit: 'Reddit', twitter: 'Twitter', facebook: 'Facebook', instagram: 'Instagram',
+  linkedin: 'LinkedIn', amazon: 'Amazon', netflix: 'Netflix', spotify: 'Spotify',
+  microsoft: 'Microsoft', apple: 'Apple', discord: 'Discord', slack: 'Slack',
+  notion: 'Notion', figma: 'Figma', dribbble: 'Dribbble', medium: 'Medium',
+  dev: 'DEV', twitch: 'Twitch', pinterest: 'Pinterest', wikipedia: 'Wikipedia', quora: 'Quora'
+};
+
+function getDomainName(url) {
+  if (!url) return 'Other';
+  try {
+    const urlObj = new URL(url);
+    let hostname = urlObj.hostname;
+    if (hostname === 'newtab' || url.startsWith('chrome://') || url.startsWith('chrome-extension://')) return 'Chrome';
+    if (url.startsWith('edge://')) return 'Edge';
+    if (url.startsWith('brave://')) return 'Brave';
+    if (url.startsWith('about:')) return 'Browser';
+    hostname = hostname.replace(/^www\./, '');
+    const parts = hostname.split('.');
+    let main = '';
+    if (parts.length >= 2) {
+      const last2 = parts.slice(-2).join('.');
+      main = ['co.uk', 'com.au', 'co.in', 'co.jp', 'com.br', 'co.nz'].includes(last2)
+        ? (parts.length > 2 ? parts[parts.length - 3] : parts[0])
+        : parts[parts.length - 2];
+    } else {
+      main = parts[0];
+    }
+    const lower = main.toLowerCase();
+    return DOMAIN_NAMES[lower] || (main.charAt(0).toUpperCase() + main.slice(1).toLowerCase());
+  } catch { return 'Other'; }
+}
+
+function getDomainColor(domain) {
+  let hash = 0;
+  for (let i = 0; i < domain.length; i++) {
+    const c = domain.charCodeAt(i);
+    hash = ((hash << 5) - hash) + c;
+    hash = hash & hash;
+  }
+  return GROUP_COLORS[Math.abs(hash) % GROUP_COLORS.length];
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
   // DOM Elements
@@ -29,9 +77,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   let allTabsData = null;
   let currentSearchQuery = '';
 
-  // Load settings and tabs on popup open
-  await loadSettings();
-  await loadTabs();
+  // Load settings and tabs in PARALLEL — direct API calls, no SW round-trip
+  await Promise.all([loadSettings(), loadTabs()]);
 
   // Event Listeners
   groupAllBtn.addEventListener('click', handleGroupAll);
@@ -77,51 +124,72 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   /**
-   * Load user settings
+   * Load user settings — reads chrome.storage.local directly (no SW round-trip)
    */
   async function loadSettings() {
-    const settings = await sendMessage('loadSettings');
-    if (settings) {
-      autoGroupToggle.checked = settings.autoGroup || false;
-    }
+    const result = await chrome.storage.local.get('tabManagerSettings');
+    const settings = result.tabManagerSettings || { autoGroup: false };
+    autoGroupToggle.checked = settings.autoGroup || false;
   }
 
   /**
-   * Load and display tabs organized by domain
+   * Load and display tabs — calls chrome.tabs.query directly (no SW round-trip)
+   * Domain organisation runs inline in the popup process.
    */
   async function loadTabs() {
-    domainList.innerHTML = `
-      <div class="loading">
-        <div class="spinner"></div>
-        Loading tabs...
-      </div>
-    `;
+    // Show loading state only initially (first load)
+    if (!allTabsData) {
+      domainList.innerHTML = `<div class="loading"><div class="spinner"></div>Loading tabs...</div>`;
+    }
 
-    const result = await sendMessage('getOrganizedTabs');
+    try {
+      const tabs = await chrome.tabs.query({ currentWindow: true });
 
-    if (!result.success) {
+      const domainsMap = new Map();
+
+      for (const tab of tabs) {
+        // Skip all browser-internal URLs
+        if (tab.url && (
+          tab.url.startsWith('chrome://') ||
+          tab.url.startsWith('chrome-extension://') ||
+          tab.url.startsWith('about:') ||
+          tab.url.startsWith('edge://') ||
+          tab.url.startsWith('brave://')
+        )) continue;
+
+        const domain = getDomainName(tab.url);
+        if (!domainsMap.has(domain)) {
+          domainsMap.set(domain, { name: domain, color: getDomainColor(domain), tabs: [] });
+        }
+        domainsMap.get(domain).tabs.push({
+          id: tab.id,
+          title: tab.title || 'New Tab',
+          url: tab.url,
+          favIconUrl: tab.favIconUrl,
+          active: tab.active,
+          pinned: tab.pinned,
+          groupId: tab.groupId
+        });
+      }
+
+      const domains = Array.from(domainsMap.values()).sort((a, b) => b.tabs.length - a.tabs.length);
+      const result = { success: true, domains, totalTabs: tabs.length };
+
+      allTabsData = result;
+      tabCount.textContent = `${result.totalTabs} tab${result.totalTabs !== 1 ? 's' : ''}`;
+      renderDomainGroups(result.domains, currentSearchQuery);
+
+    } catch (error) {
+      console.error('Error loading tabs:', error);
       domainList.innerHTML = `
         <div class="empty-state">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 8v4M12 16h.01"/>
+            <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
           </svg>
           <p>Error loading tabs</p>
         </div>
       `;
-      return;
     }
-
-    // Store tabs data for search
-    allTabsData = result;
-
-    // Update tab count
-    tabCount.textContent = `${result.totalTabs} tab${result.totalTabs !== 1 ? 's' : ''}`;
-
-    // Split view section removed — API does not exist
-
-    // Render domain groups (with search filter if active)
-    renderDomainGroups(result.domains, currentSearchQuery);
   }
 
   /**
@@ -346,24 +414,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       Grouping...
     `;
 
-    // Enable auto-group when manually grouping (for consistency)
-    const settings = await sendMessage('loadSettings');
-    settings.autoGroup = true;
-    await sendMessage('saveSettings', { settings });
+    // Enable auto-group when manually grouping — write directly to storage
+    const { tabManagerSettings = {} } = await chrome.storage.local.get('tabManagerSettings');
+    const updated = { ...tabManagerSettings, autoGroup: true };
+    await chrome.storage.local.set({ tabManagerSettings: updated });
+    autoGroupToggle.checked = true;
 
     await sendMessage('groupTabs');
-    await loadSettings();
     await loadTabs();
 
     groupAllBtn.disabled = false;
-    // Show success checkmark
     groupAllBtn.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="20 6 9 17 4 12"></polyline>
       </svg>
     `;
-
-    // Revert to original icon after 2 seconds
     setTimeout(() => {
       groupAllBtn.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -408,12 +473,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   /**
-   * Handle auto-group toggle change
+   * Handle auto-group toggle — write directly to storage (no SW round-trip)
    */
   async function handleAutoGroupToggle() {
-    const settings = await sendMessage('loadSettings');
-    settings.autoGroup = autoGroupToggle.checked;
-    await sendMessage('saveSettings', { settings });
+    const { tabManagerSettings = {} } = await chrome.storage.local.get('tabManagerSettings');
+    const updated = { ...tabManagerSettings, autoGroup: autoGroupToggle.checked };
+    await chrome.storage.local.set({ tabManagerSettings: updated });
+    // Background SW listens on storage.onChanged and will start/stop the alarm automatically
   }
 
   /**
