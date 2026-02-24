@@ -163,19 +163,25 @@ async function groupTabsByDomain(windowId) {
                 await chrome.tabs.group({ tabIds, groupId: existingGroup.id });
             } else {
                 // Create new group — pass windowId explicitly via createProperties.
-                // Per official docs this is required; relying on SW "current window" is unreliable.
                 const groupId = await chrome.tabs.group({
                     tabIds,
                     createProperties: { windowId }
                 });
+                console.log(`[TabManager] Created group ${groupId} for "${domain}" in window ${windowId}`);
+
+                // Set title first — most important property
                 try {
-                    await chrome.tabGroups.update(groupId, {
-                        title: domain,
-                        color: color,
-                        collapsed: false
-                    });
-                } catch (updateErr) {
-                    console.error(`[Tab Manager] Failed to set title "${domain}" on group ${groupId}:`, updateErr);
+                    await chrome.tabGroups.update(groupId, { title: domain });
+                    console.log(`[TabManager] Title set: "${domain}" on group ${groupId}`);
+                } catch (titleErr) {
+                    console.error(`[TabManager] FAILED title set for "${domain}" group ${groupId}:`, titleErr);
+                }
+
+                // Set color + collapsed separately (best-effort — won't block title)
+                try {
+                    await chrome.tabGroups.update(groupId, { color, collapsed: false });
+                } catch (styleErr) {
+                    console.warn(`[TabManager] Could not set color/collapsed for group ${groupId}:`, styleErr);
                 }
             }
         }
