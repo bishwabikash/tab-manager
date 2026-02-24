@@ -1,0 +1,34 @@
+Tab Manager Pro
+
+Organize tabs by domain with automatic grouping, search, duplicate detection, and split view support.
+
+Tab Manager Pro is a powerful productivity tool designed to help you manage specific browsing habits. It automatically groups your tabs by domain, identifying and organizing them into color-coded groups for easier navigation.
+
+Key Features:
+
+Automatic Tab Grouping
+Automatically organizes all your open tabs into groups based on their domain. This helps declutter your tab strip and makes it easier to find what you are looking for.
+
+Duplicate Tab Detection
+Identify and close duplicate tabs to save memory and reduce clutter. The extension scans all open tabs and provides a list of duplicates, allowing you to close them with a single click.
+
+Search and Filter
+Quickly find specific tabs using the built-in search bar. Filter tabs by title or URL to locate exactly what you need in seconds.
+
+Recently Closed Tabs
+Access and restore recently closed tabs directly from the extension. A dedicated history panel keeps track of your closed sessions.
+
+Split View Support
+Seamlessly manage tabs in split view. The extension detects and displays tabs that are currently in split view, ensuring you never lose track of your workspaces.
+
+Memory Efficient
+Designed with performance in mind. It uses efficient algorithms and caching mechanisms to ensure minimal impact on system resources.
+
+Keyboard Shortcuts
+- Ctrl+Shift+G: Group all tabs
+- Ctrl+Shift+U: Ungroup all tabs
+
+Privacy Focused
+All processing happens locally on your device. No browsing data is sent to external servers.
+
+Take control of your browser tabs today with Tab Manager Pro.
