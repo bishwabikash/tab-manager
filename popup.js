@@ -77,6 +77,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   let allTabsData = null;
   let currentSearchQuery = '';
 
+  // Capture real window ID at startup — service worker cannot use WINDOW_ID_CURRENT (-2)
+  // Without this, chrome.tabs.query & chrome.tabGroups.query in the SW return empty.
+  const { id: currentWindowId } = await chrome.windows.getCurrent();
+
   // Load settings and tabs in PARALLEL — direct API calls, no SW round-trip
   await Promise.all([loadSettings(), loadTabs()]);
 
@@ -414,13 +418,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       Grouping...
     `;
 
-    // Enable auto-group when manually grouping — write directly to storage
+    // Enable auto-group — write directly to storage
     const { tabManagerSettings = {} } = await chrome.storage.local.get('tabManagerSettings');
-    const updated = { ...tabManagerSettings, autoGroup: true };
-    await chrome.storage.local.set({ tabManagerSettings: updated });
+    await chrome.storage.local.set({ tabManagerSettings: { ...tabManagerSettings, autoGroup: true } });
     autoGroupToggle.checked = true;
 
-    await sendMessage('groupTabs');
+    // Pass real windowId — background SW cannot resolve WINDOW_ID_CURRENT (-2)
+    await sendMessage('groupTabs', { windowId: currentWindowId });
     await loadTabs();
 
     groupAllBtn.disabled = false;
@@ -448,21 +452,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       Ungrouping...
     `;
 
-    await sendMessage('ungroupTabs');
+    // Pass real windowId — background SW cannot resolve WINDOW_ID_CURRENT (-2)
+    await sendMessage('ungroupTabs', { windowId: currentWindowId });
 
-    // Reload settings to update toggle (auto-group is now disabled)
-    await loadSettings();
+    // Reload toggle state — background sets autoGroup=false during ungroup
+    const { tabManagerSettings = {} } = await chrome.storage.local.get('tabManagerSettings');
+    autoGroupToggle.checked = tabManagerSettings.autoGroup || false;
     await loadTabs();
 
     ungroupAllBtn.disabled = false;
-    // Show success checkmark
     ungroupAllBtn.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="20 6 9 17 4 12"></polyline>
       </svg>
     `;
-
-    // Revert to original icon after 2 seconds
     setTimeout(() => {
       ungroupAllBtn.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -486,7 +489,20 @@ document.addEventListener('DOMContentLoaded', async () => {
    * Find duplicate tabs
    */
   async function handleFindDuplicates() {
-    const result = await sendMessage('findDuplicates');
+    // Run duplicate detection directly in popup — no SW needed
+    const tabs = await chrome.tabs.query({ windowId: currentWindowId });
+    const urlMap = new Map();
+    for (const tab of tabs) {
+      if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') ||
+        tab.url.startsWith('about:') || tab.url.startsWith('edge://') || tab.url.startsWith('brave://')) continue;
+      if (!urlMap.has(tab.url)) urlMap.set(tab.url, { tabs: [], title: tab.title, favIconUrl: tab.favIconUrl });
+      urlMap.get(tab.url).tabs.push(tab.id);
+    }
+    const duplicates = [];
+    for (const [url, data] of urlMap.entries()) {
+      if (data.tabs.length > 1) duplicates.push({ url, title: data.title, favIconUrl: data.favIconUrl, count: data.tabs.length, tabIds: data.tabs });
+    }
+    const result = { success: true, duplicates };
 
     if (!result.success || result.duplicates.length === 0) {
       duplicatesSection.style.display = 'none';
@@ -531,10 +547,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     closeDuplicatesBtn.disabled = true;
     closeDuplicatesBtn.textContent = 'Closing...';
 
-    await sendMessage('closeDuplicates');
+    // Close duplicates directly — no SW needed
+    const tabs = await chrome.tabs.query({ windowId: currentWindowId });
+    const urlMap = new Map();
+    for (const tab of tabs) {
+      if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') ||
+        tab.url.startsWith('about:') || tab.url.startsWith('edge://') || tab.url.startsWith('brave://')) continue;
+      if (!urlMap.has(tab.url)) urlMap.set(tab.url, []);
+      urlMap.get(tab.url).push(tab.id);
+    }
+    const toClose = [];
+    for (const ids of urlMap.values()) { if (ids.length > 1) toClose.push(...ids.slice(1)); }
+    if (toClose.length > 0) await chrome.tabs.remove(toClose);
+
     duplicatesSection.style.display = 'none';
     await loadTabs();
-
     closeDuplicatesBtn.disabled = false;
     closeDuplicatesBtn.textContent = 'Close All Duplicates';
   }

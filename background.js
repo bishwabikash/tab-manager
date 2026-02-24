@@ -188,17 +188,25 @@ async function loadSettings() {
 }
 
 // Message listener for popup communication
+// resolveWindowId: always return a real integer windowId
+// WINDOW_ID_CURRENT (-2) is meaningless in a SW context — tabs.query returns empty.
+async function resolveWindowId(windowId) {
+    if (windowId && windowId !== chrome.windows.WINDOW_ID_CURRENT) return windowId;
+    const win = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+    return win.id;
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     (async () => {
         switch (request.action) {
             case 'groupTabs':
-                sendResponse(await groupTabsByDomain(request.windowId));
+                sendResponse(await groupTabsByDomain(await resolveWindowId(request.windowId)));
                 break;
             case 'ungroupTabs':
-                sendResponse(await ungroupAllTabs(request.windowId));
+                sendResponse(await ungroupAllTabs(await resolveWindowId(request.windowId)));
                 break;
             case 'getOrganizedTabs':
-                sendResponse(await getOrganizedTabs(request.windowId));
+                sendResponse(await getOrganizedTabs(await resolveWindowId(request.windowId)));
                 break;
             case 'saveSettings':
                 await saveSettings(request.settings);
@@ -208,10 +216,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 sendResponse(await loadSettings());
                 break;
             case 'findDuplicates':
-                sendResponse(await findDuplicateTabs(request.windowId));
+                sendResponse(await findDuplicateTabs(await resolveWindowId(request.windowId)));
                 break;
             case 'closeDuplicates':
-                sendResponse(await closeDuplicateTabs(request.windowId));
+                sendResponse(await closeDuplicateTabs(await resolveWindowId(request.windowId)));
                 break;
             default:
                 sendResponse({ error: 'Unknown action' });
