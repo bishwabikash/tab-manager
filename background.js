@@ -164,26 +164,27 @@ async function groupTabsByDomain(windowId) {
                 // Add tabs to existing group (title/color already set)
                 await chrome.tabs.group({ tabIds, groupId: existingGroup.id });
             } else {
-                // Create new group — pass windowId explicitly via createProperties.
+                // Create new group — windowId must be explicit (SW has no 'current window')
                 const groupId = await chrome.tabs.group({
                     tabIds,
                     createProperties: { windowId }
                 });
                 console.log(`[TabManager] Created group ${groupId} for "${domain}" in window ${windowId}`);
 
-                // Set title first — most important property
+                // Set title, color and collapsed in one call
+                // (chrome.tabs.group API has no title param — update is the only way)
                 try {
-                    await chrome.tabGroups.update(groupId, { title: domain });
-                    console.log(`[TabManager] Title set: "${domain}" on group ${groupId}`);
-                } catch (titleErr) {
-                    console.error(`[TabManager] FAILED title set for "${domain}" group ${groupId}:`, titleErr);
-                }
-
-                // Set color + collapsed separately (best-effort — won't block title)
-                try {
-                    await chrome.tabGroups.update(groupId, { color, collapsed: false });
-                } catch (styleErr) {
-                    console.warn(`[TabManager] Could not set color/collapsed for group ${groupId}:`, styleErr);
+                    await chrome.tabGroups.update(groupId, {
+                        title: domain,
+                        color: color,
+                        collapsed: false
+                    });
+                    // Read back the group to verify what Brave actually stored
+                    const stored = await chrome.tabGroups.get(groupId);
+                    console.log(`[TabManager] Stored state for group ${groupId}:`,
+                        `title="${stored.title}" color=${stored.color} collapsed=${stored.collapsed}`);
+                } catch (updateErr) {
+                    console.error(`[TabManager] tabGroups.update failed for "${domain}" group ${groupId}:`, updateErr);
                 }
             }
         }
