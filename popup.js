@@ -425,6 +425,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Pass real windowId — background SW cannot resolve WINDOW_ID_CURRENT (-2)
     await sendMessage('groupTabs', { windowId: currentWindowId });
+
+    // DEBUG: verify what Brave actually stored for group titles
+    const groups = await chrome.tabGroups.query({ windowId: currentWindowId });
+    console.log('[TabManager popup] Groups after grouping:',
+      groups.map(g => `id=${g.id} title="${g.title}" color=${g.color} collapsed=${g.collapsed}`).join(' | ')
+    );
+
     await loadTabs();
 
     groupAllBtn.disabled = false;
