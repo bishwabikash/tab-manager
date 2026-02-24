@@ -129,8 +129,8 @@ async function groupTabsByDomain(windowId) {
 
         for (const tab of unpinnedTabs) {
             const domain = getDomainName(tab.url);
-            // Skip pseudo-domains that cannot be meaningfully grouped
-            if (!domain || domain === 'Other' || domain === 'Chrome' ||
+            // Skip internal browser pseudo-domains only
+            if (!domain || domain === 'Chrome' ||
                 domain === 'Browser' || domain === 'Edge' || domain === 'Brave') continue;
             if (!domainTabs.has(domain)) {
                 domainTabs.set(domain, []);
@@ -149,8 +149,10 @@ async function groupTabsByDomain(windowId) {
 
         // Create or update groups for each domain
         for (const [domain, domainTabsList] of domainTabs) {
-            // Only group domains with 2+ tabs
-            if (domainTabsList.length < 2) continue;
+            // Group all domains — even single-tab ones get a group label.
+            // (original behaviour: < 1 never skipped anything since map only
+            //  has entries with >= 1 tab; < 2 was an unnecessary regression)
+            if (domainTabsList.length < 1) continue;
 
             const tabIds = domainTabsList.map(t => t.id);
             const color = getDomainColor(domain);
