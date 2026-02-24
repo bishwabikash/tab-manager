@@ -1,5 +1,102 @@
-{
-    {
+// Tab Manager Pro - Background Service Worker
+// Handles tab grouping by domain and split view management
+
+// Color palette for tab groups
+const GROUP_COLORS = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange'];
+
+// Well-known domain mappings for better display names
+const DOMAIN_NAMES = {
+    'google': 'Google',
+    'youtube': 'YouTube',
+    'github': 'GitHub',
+    'stackoverflow': 'Stack Overflow',
+    'reddit': 'Reddit',
+    'twitter': 'Twitter',
+    'facebook': 'Facebook',
+    'instagram': 'Instagram',
+    'linkedin': 'LinkedIn',
+    'amazon': 'Amazon',
+    'netflix': 'Netflix',
+    'spotify': 'Spotify',
+    'microsoft': 'Microsoft',
+    'apple': 'Apple',
+    'discord': 'Discord',
+    'slack': 'Slack',
+    'notion': 'Notion',
+    'figma': 'Figma',
+    'dribbble': 'Dribbble',
+    'medium': 'Medium',
+    'dev': 'DEV',
+    'twitch': 'Twitch',
+    'pinterest': 'Pinterest',
+    'wikipedia': 'Wikipedia',
+    'quora': 'Quora'
+};
+
+/**
+ * Extract a clean domain name from URL
+ * @param {string} url - Full URL
+ * @returns {string} Formatted domain name
+ */
+function getDomainName(url) {
+    if (!url) return 'Other';
+
+    try {
+        const urlObj = new URL(url);
+        let hostname = urlObj.hostname;
+
+        // Handle special URLs
+        if (hostname === 'newtab' || url.startsWith('chrome://') || url.startsWith('chrome-extension://')) {
+            return 'Chrome';
+        }
+        if (url.startsWith('edge://')) return 'Edge';
+        if (url.startsWith('brave://')) return 'Brave';
+        if (url.startsWith('about:')) return 'Browser';
+
+        // Remove www prefix
+        hostname = hostname.replace(/^www\./, '');
+
+        // Extract the main domain parts
+        const parts = hostname.split('.');
+
+        // Handle common TLDs and get the main domain
+        let mainDomain = '';
+        if (parts.length >= 2) {
+            // Check for multi-part TLDs like .co.uk, .com.au
+            const lastTwo = parts.slice(-2).join('.');
+            if (['co.uk', 'com.au', 'co.in', 'co.jp', 'com.br', 'co.nz'].includes(lastTwo)) {
+                mainDomain = parts.length > 2 ? parts[parts.length - 3] : parts[0];
+            } else {
+                mainDomain = parts[parts.length - 2];
+            }
+        } else {
+            mainDomain = parts[0];
+        }
+
+        // Check if we have a known display name
+        const lowerDomain = mainDomain.toLowerCase();
+        if (DOMAIN_NAMES[lowerDomain]) {
+            return DOMAIN_NAMES[lowerDomain];
+        }
+
+        // Capitalize first letter
+        return mainDomain.charAt(0).toUpperCase() + mainDomain.slice(1).toLowerCase();
+    } catch (e) {
+        console.error('Error parsing URL:', e);
+        return 'Other';
+    }
+}
+
+/**
+ * Get a consistent color for a domain based on hash
+ * @param {string} domain - Domain name
+ * @returns {string} Color name from GROUP_COLORS
+ */
+function getDomainColor(domain) {
+    let hash = 0;
+    for (let i = 0; i < domain.length; i++) {
+        const char = domain.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
         hash = hash & hash; // Convert to 32-bit integer
     }
     const index = Math.abs(hash) % GROUP_COLORS.length;
