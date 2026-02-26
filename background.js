@@ -148,6 +148,109 @@ async function updateGroupWithRetry(groupId, props, maxRetries = 3) {
     return false;
 }
 
+// ============================================
+// BACKGROUND GROUP NAME FIXER
+// The browser often overwrites group titles set immediately after creation.
+// This worker scans all groups, determines the correct name from the tabs
+// inside each group, and (re)applies titles, colors, and labels.
+// ============================================
+
+/**
+ * Determine the dominant domain for a set of tabs.
+ * Returns the domain that appears most often.
+ * @param {chrome.tabs.Tab[]} tabs
+ * @returns {{domain: string, color: string}|null}
+ */
+function getDominantDomain(tabs) {
+    const counts = new Map();
+    for (const tab of tabs) {
+        if (!tab.url) continue;
+        if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') ||
+            tab.url.startsWith('about:') || tab.url.startsWith('edge://') ||
+            tab.url.startsWith('brave://')) continue;
+        const domain = getDomainName(tab.url);
+        if (!domain || domain === 'Chrome' || domain === 'Other' ||
+            domain === 'Browser' || domain === 'Edge' || domain === 'Brave') continue;
+        counts.set(domain, (counts.get(domain) || 0) + 1);
+    }
+    if (counts.size === 0) return null;
+    // Pick the domain with the most tabs
+    let best = null;
+    let bestCount = 0;
+    for (const [domain, count] of counts) {
+        if (count > bestCount) {
+            best = domain;
+            bestCount = count;
+        }
+    }
+    return { domain: best, color: getDomainColor(best) };
+}
+
+/**
+ * Scan all groups in a window and fix any that are unnamed or have a
+ * mismatched title.  This is the core "background fixer" that runs
+ * after the browser has had time to settle.
+ * @param {number} windowId
+ */
+async function fixUnnamedGroups(windowId) {
+    try {
+        const groups = await chrome.tabGroups.query({ windowId });
+        if (!groups || groups.length === 0) return;
+
+        const allTabs = await chrome.tabs.query({ windowId });
+
+        for (const group of groups) {
+            // Find tabs belonging to this group
+            const groupTabs = allTabs.filter(t => t.groupId === group.id);
+            if (groupTabs.length === 0) continue;
+
+            const dominant = getDominantDomain(groupTabs);
+            if (!dominant) continue;
+
+            // Fix if title is empty/missing OR doesn't match the dominant domain
+            if (!group.title || group.title !== dominant.domain) {
+                console.log(`[TabManager:Fixer] Group ${group.id}: "${group.title || '(unnamed)'}" → "${dominant.domain}"`);
+                try {
+                    await chrome.tabGroups.update(group.id, {
+                        title: dominant.domain,
+                        color: dominant.color
+                    });
+                } catch (e) {
+                    // Group may have been removed — ignore
+                    if (!String(e).includes('No group')) {
+                        console.warn(`[TabManager:Fixer] Failed to fix group ${group.id}:`, e);
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // Window may have closed
+        console.warn('[TabManager:Fixer] fixUnnamedGroups error:', e);
+    }
+}
+
+/**
+ * Schedule the fixer to run after a delay, letting the browser settle.
+ * Uses a per-window timer to avoid duplicate runs.
+ */
+const fixerTimers = new Map();
+/**
+ * @param {number} windowId
+ * @param {number} delayMs - delay before running
+ * @param {string} [pass='default'] - unique pass identifier so multiple
+ *        scheduled sweeps (e.g. 500ms + 1500ms) don't cancel each other.
+ */
+function scheduleFixUnnamed(windowId, delayMs = 500, pass = 'default') {
+    const key = `${windowId}:${pass}`;
+    const existing = fixerTimers.get(key);
+    if (existing) clearTimeout(existing);
+    const timerId = setTimeout(async () => {
+        fixerTimers.delete(key);
+        await fixUnnamedGroups(windowId);
+    }, delayMs);
+    fixerTimers.set(key, timerId);
+}
+
 /**
  * Group all tabs in the current window by domain
  * @param {number} windowId - Optional window ID (defaults to current window)
@@ -235,6 +338,13 @@ async function groupTabsByDomain(windowId) {
     } catch (error) {
         console.error('Error grouping tabs:', error);
         return { success: false, error: error.message };
+    } finally {
+        // Schedule the background fixer to run AFTER the browser settles.
+        // This is the safety net — even if chrome.tabGroups.update() was
+        // overwritten by the browser, the fixer will re-apply names.
+        scheduleFixUnnamed(windowId, 500, 'post-group-1');
+        // And a second pass further out to catch late overwrites
+        scheduleFixUnnamed(windowId, 1500, 'post-group-2');
     }
 }
 
@@ -678,6 +788,10 @@ async function runPeriodicCheck() {
             if (hasUngrouped) {
                 await groupTabsByDomain(win.id);
             }
+
+            // ALWAYS run the fixer on every periodic tick — catches unnamed groups
+            // even when no ungrouped tabs exist (e.g. browser overwrote titles)
+            await fixUnnamedGroups(win.id);
         }
     } catch (e) { /* Window/tab closed during check */ }
 }
@@ -757,4 +871,24 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     }
 })();
 
-console.log('Tab Manager Pro loaded (memory-optimized)');
+// ============================================
+// REACT TO NEW GROUP CREATION
+// When the browser creates a group (or we do), the title is often blank.
+// Listen for new groups and schedule the fixer after a healthy delay.
+// ============================================
+chrome.tabGroups.onCreated.addListener((group) => {
+    // Schedule a fix after the browser finishes its internal updates
+    scheduleFixUnnamed(group.windowId, 300, 'on-created-1');
+    // Second pass for stubborn overwrites
+    scheduleFixUnnamed(group.windowId, 1000, 'on-created-2');
+});
+
+// Also listen for group updates where the title gets cleared
+chrome.tabGroups.onUpdated.addListener((group) => {
+    if (!group.title || group.title.trim() === '') {
+        // Browser cleared the title — schedule the fixer
+        scheduleFixUnnamed(group.windowId, 200);
+    }
+});
+
+console.log('Tab Manager Pro loaded (with background group-name fixer)');
