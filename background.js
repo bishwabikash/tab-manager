@@ -104,6 +104,51 @@ function getDomainColor(domain) {
 }
 
 /**
+ * Update a tab group's metadata with retry logic.
+ * Chromium (especially Brave) can race between group creation and update;
+ * the title/color may not stick on the first attempt.  This helper retries
+ * up to `maxRetries` times with a short backoff.
+ * @param {number} groupId - The group to update
+ * @param {{title?: string, color?: string, collapsed?: boolean}} props - Properties to set
+ * @param {number} maxRetries - Maximum number of retry attempts (default 3)
+ */
+async function updateGroupWithRetry(groupId, props, maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            await chrome.tabGroups.update(groupId, props);
+
+            // Verify the title actually stuck (main symptom of the race)
+            const stored = await chrome.tabGroups.get(groupId);
+            if (props.title && stored.title === props.title) {
+                console.log(`[TabManager] Group ${groupId} updated: title="${stored.title}" color=${stored.color} (attempt ${attempt})`);
+                return true;
+            }
+
+            // Title didn't stick — wait and retry
+            if (attempt < maxRetries) {
+                console.warn(`[TabManager] Group ${groupId} title mismatch (expected "${props.title}", got "${stored.title}"), retrying (${attempt}/${maxRetries})...`);
+                await new Promise(r => setTimeout(r, 50 * attempt));
+            }
+        } catch (err) {
+            // Group may have been removed between calls — not retryable
+            if (String(err).includes('No group')) {
+                console.warn(`[TabManager] Group ${groupId} no longer exists, skipping update.`);
+                return false;
+            }
+            if (attempt < maxRetries) {
+                console.warn(`[TabManager] tabGroups.update attempt ${attempt} failed for group ${groupId}:`, err);
+                await new Promise(r => setTimeout(r, 50 * attempt));
+            } else {
+                console.error(`[TabManager] tabGroups.update failed after ${maxRetries} attempts for group ${groupId}:`, err);
+                return false;
+            }
+        }
+    }
+    console.error(`[TabManager] Title for group ${groupId} did not stick after ${maxRetries} attempts.`);
+    return false;
+}
+
+/**
  * Group all tabs in the current window by domain
  * @param {number} windowId - Optional window ID (defaults to current window)
  */
@@ -161,8 +206,14 @@ async function groupTabsByDomain(windowId) {
             const existingGroup = groupByTitle.get(domain);
 
             if (existingGroup) {
-                // Add tabs to existing group (title/color already set)
+                // Add tabs to existing group
                 await chrome.tabs.group({ tabIds, groupId: existingGroup.id });
+                // Always refresh title/color — they can be lost after browser restart or API glitches
+                await updateGroupWithRetry(existingGroup.id, {
+                    title: domain,
+                    color: color,
+                    collapsed: existingGroup.collapsed  // preserve user's collapsed state
+                });
             } else {
                 // Create new group — windowId must be explicit (SW has no 'current window')
                 const groupId = await chrome.tabs.group({
@@ -171,21 +222,12 @@ async function groupTabsByDomain(windowId) {
                 });
                 console.log(`[TabManager] Created group ${groupId} for "${domain}" in window ${windowId}`);
 
-                // Set title, color and collapsed in one call
-                // (chrome.tabs.group API has no title param — update is the only way)
-                try {
-                    await chrome.tabGroups.update(groupId, {
-                        title: domain,
-                        color: color,
-                        collapsed: false
-                    });
-                    // Read back the group to verify what Brave actually stored
-                    const stored = await chrome.tabGroups.get(groupId);
-                    console.log(`[TabManager] Stored state for group ${groupId}:`,
-                        `title="${stored.title}" color=${stored.color} collapsed=${stored.collapsed}`);
-                } catch (updateErr) {
-                    console.error(`[TabManager] tabGroups.update failed for "${domain}" group ${groupId}:`, updateErr);
-                }
+                // Set title, color and collapsed with retry logic
+                await updateGroupWithRetry(groupId, {
+                    title: domain,
+                    color: color,
+                    collapsed: false
+                });
             }
         }
 
@@ -466,21 +508,26 @@ function invalidateSettingsCache() {
     settingsCacheTime = 0;
 }
 
-// Single debounce timer (reuse instead of creating new ones)
-let regroupDebounceTimer = null;
+// Per-window debounce timers (prevents cross-window conflicts)
+const regroupDebounceTimers = new Map();
 
 function debounceRegroup(windowId, delay = 100) {
-    if (regroupDebounceTimer) {
-        clearTimeout(regroupDebounceTimer);
+    const existingTimer = regroupDebounceTimers.get(windowId);
+    if (existingTimer) {
+        clearTimeout(existingTimer);
     }
-    regroupDebounceTimer = setTimeout(async () => {
-        regroupDebounceTimer = null;
+    const timerId = setTimeout(async () => {
+        regroupDebounceTimers.delete(windowId);
         const settings = await getCachedSettings();
         if (settings.autoGroup) {
             await groupTabsByDomain(windowId);
         }
     }, delay);
+    regroupDebounceTimers.set(windowId, timerId);
 }
+
+// Domain-level lock to prevent concurrent group creation for the same domain
+const pendingGroupDomains = new Set();
 
 // Lightweight single-tab grouping
 async function ensureTabGrouped(tab) {
@@ -504,6 +551,14 @@ async function ensureTabGrouped(tab) {
     // Only process if tab is ungrouped
     if (tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE) return;
 
+    // Prevent concurrent group creation for the same domain+window
+    const lockKey = `${tab.windowId}:${domain}`;
+    if (pendingGroupDomains.has(lockKey)) {
+        // Another call is already creating a group for this domain — defer to debounce
+        debounceRegroup(tab.windowId, 150);
+        return;
+    }
+
     // Find existing group for this domain
     const groups = await chrome.tabGroups.query({ windowId: tab.windowId });
     const existingGroup = groups.find(g => g.title === domain);
@@ -518,20 +573,20 @@ async function ensureTabGrouped(tab) {
         );
 
         if (sameDomainTabs.length > 1) {
-            const tabIds = sameDomainTabs.map(t => t.id);
-            // Pass createProperties.windowId explicitly — avoids SW "current window" ambiguity
-            const groupId = await chrome.tabs.group({
-                tabIds,
-                createProperties: { windowId: tab.windowId }
-            });
+            pendingGroupDomains.add(lockKey);
             try {
-                await chrome.tabGroups.update(groupId, {
+                const tabIds = sameDomainTabs.map(t => t.id);
+                const groupId = await chrome.tabs.group({
+                    tabIds,
+                    createProperties: { windowId: tab.windowId }
+                });
+                await updateGroupWithRetry(groupId, {
                     title: domain,
                     color: getDomainColor(domain),
                     collapsed: false
                 });
-            } catch (updateErr) {
-                console.error(`[Tab Manager] ensureTabGrouped: Failed to set title "${domain}":`, updateErr);
+            } finally {
+                pendingGroupDomains.delete(lockKey);
             }
         }
     }
@@ -541,6 +596,15 @@ async function ensureTabGrouped(tab) {
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     const settings = await getCachedSettings();
     if (!settings.autoGroup) return;
+
+    // When a tab is UN-pinned, re-group it automatically
+    if (changeInfo.pinned === false) {
+        try {
+            const freshTab = await chrome.tabs.get(tabId);
+            await ensureTabGrouped(freshTab);
+        } catch (e) { /* Tab may have been closed */ }
+        return;
+    }
 
     if (changeInfo.url || changeInfo.status === 'complete') {
         debounceRegroup(tab.windowId, 50);
