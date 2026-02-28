@@ -112,7 +112,12 @@ function getDomainColor(domain) {
  * @param {{title?: string, color?: string, collapsed?: boolean}} props - Properties to set
  * @param {number} maxRetries - Maximum number of retry attempts (default 3)
  */
-async function updateGroupWithRetry(groupId, props, maxRetries = 3) {
+async function updateGroupWithRetry(groupId, props, maxRetries = 5) {
+    // Initial delay — give the browser time to finish its internal group setup
+    // before we attempt to set the title. Without this, the very first update
+    // is almost always overwritten by Chrome/Brave's pipeline.
+    await new Promise(r => setTimeout(r, 100));
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             await chrome.tabGroups.update(groupId, props);
@@ -124,10 +129,10 @@ async function updateGroupWithRetry(groupId, props, maxRetries = 3) {
                 return true;
             }
 
-            // Title didn't stick — wait and retry
+            // Title didn't stick — wait and retry with longer backoff
             if (attempt < maxRetries) {
                 console.warn(`[TabManager] Group ${groupId} title mismatch (expected "${props.title}", got "${stored.title}"), retrying (${attempt}/${maxRetries})...`);
-                await new Promise(r => setTimeout(r, 50 * attempt));
+                await new Promise(r => setTimeout(r, 150 * attempt));
             }
         } catch (err) {
             // Group may have been removed between calls — not retryable
@@ -137,7 +142,7 @@ async function updateGroupWithRetry(groupId, props, maxRetries = 3) {
             }
             if (attempt < maxRetries) {
                 console.warn(`[TabManager] tabGroups.update attempt ${attempt} failed for group ${groupId}:`, err);
-                await new Promise(r => setTimeout(r, 50 * attempt));
+                await new Promise(r => setTimeout(r, 150 * attempt));
             } else {
                 console.error(`[TabManager] tabGroups.update failed after ${maxRetries} attempts for group ${groupId}:`, err);
                 return false;
@@ -210,17 +215,12 @@ async function fixUnnamedGroups(windowId) {
             // Fix if title is empty/missing OR doesn't match the dominant domain
             if (!group.title || group.title !== dominant.domain) {
                 console.log(`[TabManager:Fixer] Group ${group.id}: "${group.title || '(unnamed)'}" → "${dominant.domain}"`);
-                try {
-                    await chrome.tabGroups.update(group.id, {
-                        title: dominant.domain,
-                        color: dominant.color
-                    });
-                } catch (e) {
-                    // Group may have been removed — ignore
-                    if (!String(e).includes('No group')) {
-                        console.warn(`[TabManager:Fixer] Failed to fix group ${group.id}:`, e);
-                    }
-                }
+                // Use retry logic — a single raw update() is often overwritten
+                // by Chrome/Brave's internal pipeline.
+                await updateGroupWithRetry(group.id, {
+                    title: dominant.domain,
+                    color: dominant.color
+                });
             }
         }
     } catch (e) {
@@ -343,8 +343,11 @@ async function groupTabsByDomain(windowId) {
         // This is the safety net — even if chrome.tabGroups.update() was
         // overwritten by the browser, the fixer will re-apply names.
         scheduleFixUnnamed(windowId, 500, 'post-group-1');
-        // And a second pass further out to catch late overwrites
+        // Additional passes to catch late overwrites — Chrome/Brave's internal
+        // pipeline can take up to several seconds to settle.
         scheduleFixUnnamed(windowId, 1500, 'post-group-2');
+        scheduleFixUnnamed(windowId, 3000, 'post-group-3');
+        scheduleFixUnnamed(windowId, 5000, 'post-group-4');
     }
 }
 
@@ -877,17 +880,22 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 // Listen for new groups and schedule the fixer after a healthy delay.
 // ============================================
 chrome.tabGroups.onCreated.addListener((group) => {
-    // Schedule a fix after the browser finishes its internal updates
+    // Schedule multiple fix passes after the browser finishes its internal updates.
+    // Chrome/Brave's pipeline can overwrite titles for several seconds.
     scheduleFixUnnamed(group.windowId, 300, 'on-created-1');
-    // Second pass for stubborn overwrites
     scheduleFixUnnamed(group.windowId, 1000, 'on-created-2');
+    scheduleFixUnnamed(group.windowId, 2000, 'on-created-3');
+    scheduleFixUnnamed(group.windowId, 4000, 'on-created-4');
 });
 
 // Also listen for group updates where the title gets cleared
 chrome.tabGroups.onUpdated.addListener((group) => {
     if (!group.title || group.title.trim() === '') {
-        // Browser cleared the title — schedule the fixer
-        scheduleFixUnnamed(group.windowId, 200);
+        // Browser cleared the title — schedule multiple fixer passes
+        // to ensure we outlast the browser's overwrite pipeline.
+        scheduleFixUnnamed(group.windowId, 200, 'on-cleared-1');
+        scheduleFixUnnamed(group.windowId, 800, 'on-cleared-2');
+        scheduleFixUnnamed(group.windowId, 2000, 'on-cleared-3');
     }
 });
 
