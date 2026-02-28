@@ -107,66 +107,7 @@ function getDomainColor(domain) {
  * Update a tab group's metadata with retry logic.
  * Chromium (especially Brave) can race between group creation and update;
  * the title/color may not stick on the first attempt.  This helper retries
- * up to `maxRetries` times with a short backoff.
- * @param {number} groupId - The group to update
- * @param {{title?: string, color?: string, collapsed?: boolean}} props - Properties to set
- * @param {number} maxRetries - Maximum number of retry attempts (default 3)
- */
-async function updateGroupWithRetry(groupId, props, maxRetries = 5) {
-    // Initial delay — give the browser time to finish its internal group setup
-    // before we attempt to set the title. Without this, the very first update
-    // is almost always overwritten by Chrome/Brave's pipeline.
-    await new Promise(r => setTimeout(r, 100));
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            await chrome.tabGroups.update(groupId, props);
-
-            // Verify the title actually stuck (main symptom of the race)
-            const stored = await chrome.tabGroups.get(groupId);
-            if (props.title && stored.title === props.title) {
-                console.log(`[TabManager] Group ${groupId} updated: title="${stored.title}" color=${stored.color} (attempt ${attempt})`);
-
-                // CRITICAL FIX: Force the browser to visually render the title.
-                // Chrome/Brave has a UI rendering quirk where group titles set via
-                // the API (especially with createProperties.windowId) don't appear
-                // in the tab strip until a visual state change occurs.
-                // Doing this asynchronously avoids blocking the group creation loop.
-                (async () => {
-                    try {
-                        const desiredCollapsed = props.collapsed ?? false;
-                        await chrome.tabGroups.update(groupId, { collapsed: !desiredCollapsed });
-                        await new Promise(r => setTimeout(r, 50));
-                        await chrome.tabGroups.update(groupId, { collapsed: desiredCollapsed });
-                    } catch (_) { /* Group removed — harmless */ }
-                })();
-
-                return true;
-            }
-
-            // Title didn't stick — wait and retry with longer backoff
-            if (attempt < maxRetries) {
-                console.warn(`[TabManager] Group ${groupId} title mismatch (expected "${props.title}", got "${stored.title}"), retrying (${attempt}/${maxRetries})...`);
-                await new Promise(r => setTimeout(r, 150 * attempt));
-            }
-        } catch (err) {
-            // Group may have been removed between calls — not retryable
-            if (String(err).includes('No group')) {
-                console.warn(`[TabManager] Group ${groupId} no longer exists, skipping update.`);
-                return false;
-            }
-            if (attempt < maxRetries) {
-                console.warn(`[TabManager] tabGroups.update attempt ${attempt} failed for group ${groupId}:`, err);
-                await new Promise(r => setTimeout(r, 150 * attempt));
-            } else {
-                console.error(`[TabManager] tabGroups.update failed after ${maxRetries} attempts for group ${groupId}:`, err);
-                return false;
-            }
-        }
-    }
-    console.error(`[TabManager] Title for group ${groupId} did not stick after ${maxRetries} attempts.`);
-    return false;
-}
+// Removed updateGroupWithRetry as it introduced complex race conditions
 
 // ============================================
 // BACKGROUND GROUP NAME FIXER
@@ -328,7 +269,7 @@ async function groupTabsByDomain(windowId) {
                     // Add tabs to existing group
                     await chrome.tabs.group({ tabIds, groupId: existingGroup.id });
                     // Always refresh title/color — they can be lost after browser restart or API glitches
-                    await updateGroupWithRetry(existingGroup.id, {
+                    await chrome.tabGroups.update(existingGroup.id, {
                         title: domain,
                         color: color,
                         collapsed: existingGroup.collapsed  // preserve user's collapsed state
@@ -336,33 +277,35 @@ async function groupTabsByDomain(windowId) {
                 } catch (err) {
                     if (String(err).includes('No group')) {
                         console.warn(`[TabManager] Group ${existingGroup.id} for "${domain}" vanished. Falling back to new group.`);
-                        const groupId = await chrome.tabs.group({
-                            tabIds,
-                            createProperties: { windowId }
-                        });
-                        await updateGroupWithRetry(groupId, {
-                            title: domain,
-                            color: color,
-                            collapsed: false
-                        });
+                        const groupId = await chrome.tabs.group({ tabIds });
+                        setTimeout(async () => {
+                            try {
+                                await chrome.tabGroups.update(groupId, {
+                                    title: domain,
+                                    color: color,
+                                    collapsed: false
+                                });
+                            } catch (_) { }
+                        }, 50);
                     } else {
                         throw err; // rethrow other unexpected errors
                     }
                 }
             } else {
-                // Create new group — windowId must be explicit (SW has no 'current window')
-                const groupId = await chrome.tabs.group({
-                    tabIds,
-                    createProperties: { windowId }
-                });
+                // Create new group
+                const groupId = await chrome.tabs.group({ tabIds });
                 console.log(`[TabManager] Created group ${groupId} for "${domain}" in window ${windowId}`);
 
-                // Set title, color and collapsed with retry logic
-                await updateGroupWithRetry(groupId, {
-                    title: domain,
-                    color: color,
-                    collapsed: false
-                });
+                // Set title, color and collapsed with a tiny delay to circumvent Chrome's setup race
+                setTimeout(async () => {
+                    try {
+                        await chrome.tabGroups.update(groupId, {
+                            title: domain,
+                            color: color,
+                            collapsed: false
+                        });
+                    } catch (_) { }
+                }, 50);
             }
         }
 
@@ -714,15 +657,16 @@ async function ensureTabGrouped(tab) {
         } catch (err) {
             if (String(err).includes('No group')) {
                 // Group vanished, fall back
-                const groupId = await chrome.tabs.group({
-                    tabIds: [tab.id],
-                    createProperties: { windowId: tab.windowId }
-                });
-                await updateGroupWithRetry(groupId, {
-                    title: domain,
-                    color: getDomainColor(domain),
-                    collapsed: false
-                });
+                const groupId = await chrome.tabs.group({ tabIds: [tab.id] });
+                setTimeout(async () => {
+                    try {
+                        await chrome.tabGroups.update(groupId, {
+                            title: domain,
+                            color: getDomainColor(domain),
+                            collapsed: false
+                        });
+                    } catch (_) { }
+                }, 50);
             }
         }
     } else {
@@ -736,16 +680,16 @@ async function ensureTabGrouped(tab) {
             pendingGroupDomains.add(lockKey);
             try {
                 const tabIds = sameDomainTabs.map(t => t.id);
-                // windowId must be explicit since Service Workers have no current window
-                const groupId = await chrome.tabs.group({
-                    tabIds,
-                    createProperties: { windowId: tab.windowId }
-                });
-                await updateGroupWithRetry(groupId, {
-                    title: domain,
-                    color: getDomainColor(domain),
-                    collapsed: false
-                });
+                const groupId = await chrome.tabs.group({ tabIds });
+                setTimeout(async () => {
+                    try {
+                        await chrome.tabGroups.update(groupId, {
+                            title: domain,
+                            color: getDomainColor(domain),
+                            collapsed: false
+                        });
+                    } catch (_) { }
+                }, 50);
             } finally {
                 pendingGroupDomains.delete(lockKey);
             }
