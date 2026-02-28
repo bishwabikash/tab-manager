@@ -126,6 +126,21 @@ async function updateGroupWithRetry(groupId, props, maxRetries = 5) {
             const stored = await chrome.tabGroups.get(groupId);
             if (props.title && stored.title === props.title) {
                 console.log(`[TabManager] Group ${groupId} updated: title="${stored.title}" color=${stored.color} (attempt ${attempt})`);
+
+                // CRITICAL FIX: Force the browser to visually render the title.
+                // Chrome/Brave has a UI rendering quirk where group titles set via
+                // the API (especially with createProperties.windowId) don't appear
+                // in the tab strip until a visual state change occurs.
+                // Doing this asynchronously avoids blocking the group creation loop.
+                (async () => {
+                    try {
+                        const desiredCollapsed = props.collapsed ?? false;
+                        await chrome.tabGroups.update(groupId, { collapsed: !desiredCollapsed });
+                        await new Promise(r => setTimeout(r, 50));
+                        await chrome.tabGroups.update(groupId, { collapsed: desiredCollapsed });
+                    } catch (_) { /* Group removed — harmless */ }
+                })();
+
                 return true;
             }
 
