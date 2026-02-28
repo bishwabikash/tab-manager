@@ -324,20 +324,32 @@ async function groupTabsByDomain(windowId) {
             const existingGroup = groupByTitle.get(domain);
 
             if (existingGroup) {
-                // Add tabs to existing group
-                await chrome.tabs.group({ tabIds, groupId: existingGroup.id });
-                // Always refresh title/color — they can be lost after browser restart or API glitches
-                await updateGroupWithRetry(existingGroup.id, {
-                    title: domain,
-                    color: color,
-                    collapsed: existingGroup.collapsed  // preserve user's collapsed state
-                });
+                try {
+                    // Add tabs to existing group
+                    await chrome.tabs.group({ tabIds, groupId: existingGroup.id });
+                    // Always refresh title/color — they can be lost after browser restart or API glitches
+                    await updateGroupWithRetry(existingGroup.id, {
+                        title: domain,
+                        color: color,
+                        collapsed: existingGroup.collapsed  // preserve user's collapsed state
+                    });
+                } catch (err) {
+                    if (String(err).includes('No group')) {
+                        console.warn(`[TabManager] Group ${existingGroup.id} for "${domain}" vanished. Falling back to new group.`);
+                        const groupId = await chrome.tabs.group({ tabIds });
+                        await updateGroupWithRetry(groupId, {
+                            title: domain,
+                            color: color,
+                            collapsed: false
+                        });
+                    } else {
+                        throw err; // rethrow other unexpected errors
+                    }
+                }
             } else {
-                // Create new group — windowId must be explicit (SW has no 'current window')
-                const groupId = await chrome.tabs.group({
-                    tabIds,
-                    createProperties: { windowId }
-                });
+                // Create new group — tabIds tells Chrome which window to use,
+                // no createProperties needed (v1.2.0 approach that works correctly)
+                const groupId = await chrome.tabs.group({ tabIds });
                 console.log(`[TabManager] Created group ${groupId} for "${domain}" in window ${windowId}`);
 
                 // Set title, color and collapsed with retry logic
@@ -692,7 +704,19 @@ async function ensureTabGrouped(tab) {
     const existingGroup = groups.find(g => g.title === domain);
 
     if (existingGroup) {
-        await chrome.tabs.group({ tabIds: [tab.id], groupId: existingGroup.id });
+        try {
+            await chrome.tabs.group({ tabIds: [tab.id], groupId: existingGroup.id });
+        } catch (err) {
+            if (String(err).includes('No group')) {
+                // Group vanished, fall back
+                const groupId = await chrome.tabs.group({ tabIds: [tab.id] });
+                await updateGroupWithRetry(groupId, {
+                    title: domain,
+                    color: getDomainColor(domain),
+                    collapsed: false
+                });
+            }
+        }
     } else {
         // Only create new group if multiple tabs share domain
         const allTabs = await chrome.tabs.query({ windowId: tab.windowId });
@@ -704,10 +728,8 @@ async function ensureTabGrouped(tab) {
             pendingGroupDomains.add(lockKey);
             try {
                 const tabIds = sameDomainTabs.map(t => t.id);
-                const groupId = await chrome.tabs.group({
-                    tabIds,
-                    createProperties: { windowId: tab.windowId }
-                });
+                // tabIds tells Chrome which window to use — no createProperties needed
+                const groupId = await chrome.tabs.group({ tabIds });
                 await updateGroupWithRetry(groupId, {
                     title: domain,
                     color: getDomainColor(domain),
