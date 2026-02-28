@@ -336,7 +336,10 @@ async function groupTabsByDomain(windowId) {
                 } catch (err) {
                     if (String(err).includes('No group')) {
                         console.warn(`[TabManager] Group ${existingGroup.id} for "${domain}" vanished. Falling back to new group.`);
-                        const groupId = await chrome.tabs.group({ tabIds });
+                        const groupId = await chrome.tabs.group({
+                            tabIds,
+                            createProperties: { windowId }
+                        });
                         await updateGroupWithRetry(groupId, {
                             title: domain,
                             color: color,
@@ -347,9 +350,11 @@ async function groupTabsByDomain(windowId) {
                     }
                 }
             } else {
-                // Create new group — tabIds tells Chrome which window to use,
-                // no createProperties needed (v1.2.0 approach that works correctly)
-                const groupId = await chrome.tabs.group({ tabIds });
+                // Create new group — windowId must be explicit (SW has no 'current window')
+                const groupId = await chrome.tabs.group({
+                    tabIds,
+                    createProperties: { windowId }
+                });
                 console.log(`[TabManager] Created group ${groupId} for "${domain}" in window ${windowId}`);
 
                 // Set title, color and collapsed with retry logic
@@ -709,7 +714,10 @@ async function ensureTabGrouped(tab) {
         } catch (err) {
             if (String(err).includes('No group')) {
                 // Group vanished, fall back
-                const groupId = await chrome.tabs.group({ tabIds: [tab.id] });
+                const groupId = await chrome.tabs.group({
+                    tabIds: [tab.id],
+                    createProperties: { windowId: tab.windowId }
+                });
                 await updateGroupWithRetry(groupId, {
                     title: domain,
                     color: getDomainColor(domain),
@@ -728,8 +736,11 @@ async function ensureTabGrouped(tab) {
             pendingGroupDomains.add(lockKey);
             try {
                 const tabIds = sameDomainTabs.map(t => t.id);
-                // tabIds tells Chrome which window to use — no createProperties needed
-                const groupId = await chrome.tabs.group({ tabIds });
+                // windowId must be explicit since Service Workers have no current window
+                const groupId = await chrome.tabs.group({
+                    tabIds,
+                    createProperties: { windowId: tab.windowId }
+                });
                 await updateGroupWithRetry(groupId, {
                     title: domain,
                     color: getDomainColor(domain),
