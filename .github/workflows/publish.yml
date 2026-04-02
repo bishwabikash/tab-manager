@@ -1,0 +1,99 @@
+# ============================================================
+# Tab Manager Pro — Chrome Web Store Publish Workflow
+# ============================================================
+#
+# REQUIRED SECRETS (configure in GitHub → Settings → Secrets →
+# Actions → New repository secret):
+#
+#   CHROME_EXTENSION_ID   — The extension ID from the Chrome Web
+#                           Store dashboard URL, e.g.:
+#                           https://chrome.google.com/webstore/detail/NAME/<ID>
+#
+#   CHROME_CLIENT_ID      — OAuth 2.0 client ID from Google Cloud
+#   CHROME_CLIENT_SECRET  — OAuth 2.0 client secret from Google Cloud
+#   CHROME_REFRESH_TOKEN  — Long-lived refresh token obtained via OAuth
+#
+# HOW TO OBTAIN CWS API CREDENTIALS:
+#
+#   1. Go to https://console.cloud.google.com/
+#   2. Create a project (or reuse one) → enable "Chrome Web Store API"
+#   3. OAuth consent screen → External → add your Google account as a
+#      test user (or publish the consent screen)
+#   4. Credentials → Create OAuth client ID → Desktop application
+#      → note the Client ID and Client Secret above
+#   5. Generate a refresh token once with this one-liner (replace
+#      YOUR_CLIENT_ID):
+#
+#        npx chrome-webstore-upload-keys
+#
+#      — or follow the manual OAuth flow documented at:
+#        https://developer.chrome.com/docs/webstore/using-api/
+#
+# TRIGGER NOTES:
+#   This workflow fires on BOTH a version-tag push AND a GitHub
+#   release publish. If you create a release from the GitHub UI
+#   while targeting a new tag, both events fire for the same
+#   commit and the upload will run twice.
+#   Recommendation: pick ONE workflow in your release process —
+#   either always push a tag directly, or always use GitHub
+#   Releases — to avoid duplicate uploads.
+# ============================================================
+
+name: Publish to Chrome Web Store
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+  release:
+    types: [published]
+
+# Prevent concurrent publish runs for the same ref so a
+# tag-push + release-published double-trigger queues rather
+# than races. The first run wins; the second is a no-op upload.
+concurrency:
+  group: cws-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build & publish extension
+    runs-on: ubuntu-latest
+
+    # Minimal permissions — read-only checkout is all we need.
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Zip only the extension source files. Dev/meta files
+      # (.github, *.md, store-screenshots, description.txt,
+      # *.workspace, screenshots) are intentionally excluded.
+      - name: Build extension zip
+        run: |
+          zip -r extension.zip \
+            background.js \
+            manifest.json \
+            popup.css \
+            popup.html \
+            popup.js \
+            icons/
+
+      # Verify the zip was created and show its contents as a
+      # sanity check in the workflow log.
+      - name: Verify zip contents
+        run: unzip -l extension.zip
+
+      - name: Upload to Chrome Web Store
+        uses: trmcnvn/chrome-webstore-upload@v1
+        with:
+          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          client-id: ${{ secrets.CHROME_CLIENT_ID }}
+          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          zip-file: extension.zip
+          # Set to false to upload a draft without auto-publishing.
+          # Set to true to publish immediately after upload.
+          publish: true
