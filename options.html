@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tab Manager Pro — Settings</title>
+  <style>
+    :root {
+      --primary: #a8c7fa;
+      --primary-container: #1c4587;
+      --on-primary: #062e6f;
+      --on-primary-container: #d6e3ff;
+      --surface: #131316;
+      --surface-container: #1e1f23;
+      --surface-container-high: #282a2e;
+      --surface-container-highest: #333538;
+      --on-surface: #e3e2e6;
+      --on-surface-variant: #c4c6cf;
+      --outline: #8e9099;
+      --outline-variant: #44464f;
+      --group-green: #81c995;
+    }
+    [data-theme="light"] {
+      --primary: #1c4587;
+      --primary-container: #d6e3ff;
+      --on-primary: #ffffff;
+      --on-primary-container: #062e6f;
+      --surface: #f8f9ff;
+      --surface-container: #edf0fa;
+      --surface-container-high: #e3e6f3;
+      --surface-container-highest: #d8dbed;
+      --on-surface: #1a1c22;
+      --on-surface-variant: #44464f;
+      --outline: #74777f;
+      --outline-variant: #c4c6cf;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Roboto, 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--surface);
+      color: var(--on-surface);
+      padding: 32px;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 36px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--outline-variant);
+    }
+    header svg { width: 32px; height: 32px; color: var(--primary); }
+    header h1 { font-size: 22px; font-weight: 600; }
+    .section {
+      margin-bottom: 28px;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--on-surface-variant);
+      margin-bottom: 8px;
+      padding-left: 4px;
+    }
+    .setting-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px;
+      background: var(--surface-container);
+      border-radius: 12px;
+      margin-bottom: 6px;
+      transition: background 0.15s;
+    }
+    .setting-row:hover { background: var(--surface-container-high); }
+    .setting-info { flex: 1; }
+    .setting-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--on-surface);
+      margin-bottom: 3px;
+    }
+    .setting-desc {
+      font-size: 12px;
+      color: var(--on-surface-variant);
+      line-height: 1.5;
+    }
+    /* Toggle */
+    .toggle-wrap { display: flex; align-items: center; padding-top: 2px; }
+    .toggle-input { display: none; }
+    .toggle-switch {
+      position: relative;
+      width: 40px;
+      height: 24px;
+      background: var(--surface-container-highest);
+      border-radius: 9999px;
+      border: 2px solid var(--outline);
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: 12px;
+      height: 12px;
+      background: var(--outline);
+      border-radius: 9999px;
+      transition: all 0.15s;
+    }
+    .toggle-input:checked + .toggle-switch {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+    .toggle-input:checked + .toggle-switch::after {
+      left: 20px;
+      width: 16px;
+      height: 16px;
+      top: 2px;
+      background: var(--on-primary);
+    }
+    /* Theme radio group */
+    .theme-options {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .theme-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: var(--surface-container-high);
+      border: 2px solid var(--outline-variant);
+      border-radius: 9999px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--on-surface-variant);
+      transition: all 0.15s;
+    }
+    .theme-option:hover { border-color: var(--outline); color: var(--on-surface); }
+    .theme-option.active {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: var(--primary-container);
+      color: var(--on-primary-container);
+    }
+    .save-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--group-green);
+      color: #000;
+      padding: 10px 24px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      transition: all 0.2s;
+      pointer-events: none;
+    }
+    .save-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="8" height="8" rx="2" fill="currentColor" opacity="0.9"/>
+      <rect x="14" y="2" width="8" height="8" rx="2" fill="currentColor" opacity="0.7"/>
+      <rect x="2" y="14" width="8" height="8" rx="2" fill="currentColor" opacity="0.7"/>
+      <rect x="14" y="14" width="8" height="8" rx="2" fill="currentColor" opacity="0.4"/>
+    </svg>
+    <h1>Tab Manager Pro — Settings</h1>
+  </header>
+
+  <div class="section">
+    <div class="section-title">Tab Grouping</div>
+
+    <label class="setting-row">
+      <div class="setting-info">
+        <div class="setting-label">Auto-group new tabs</div>
+        <div class="setting-desc">Automatically place new tabs into groups based on their domain as you browse.</div>
+      </div>
+      <div class="toggle-wrap">
+        <input type="checkbox" id="autoGroup" class="toggle-input">
+        <span class="toggle-switch"></span>
+      </div>
+    </label>
+
+    <label class="setting-row">
+      <div class="setting-info">
+        <div class="setting-label">Group single-tab domains</div>
+        <div class="setting-desc">Create a group even if only one tab is open for a given domain.</div>
+      </div>
+      <div class="toggle-wrap">
+        <input type="checkbox" id="groupSingleTabs" class="toggle-input">
+        <span class="toggle-switch"></span>
+      </div>
+    </label>
+
+    <label class="setting-row">
+      <div class="setting-info">
+        <div class="setting-label">Collapse groups by default</div>
+        <div class="setting-desc">Show all domain groups collapsed when you open the popup.</div>
+      </div>
+      <div class="toggle-wrap">
+        <input type="checkbox" id="collapseByDefault" class="toggle-input">
+        <span class="toggle-switch"></span>
+      </div>
+    </label>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Duplicates</div>
+
+    <label class="setting-row">
+      <div class="setting-info">
+        <div class="setting-label">Auto-close duplicate tabs</div>
+        <div class="setting-desc">When you navigate to a URL that's already open in the window, the new duplicate tab is automatically closed and the existing tab is focused.</div>
+      </div>
+      <div class="toggle-wrap">
+        <input type="checkbox" id="autoCloseDuplicates" class="toggle-input">
+        <span class="toggle-switch"></span>
+      </div>
+    </label>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Appearance</div>
+
+    <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 10px;">
+      <div class="setting-info">
+        <div class="setting-label">Theme</div>
+        <div class="setting-desc">Choose between dark and light interface.</div>
+      </div>
+      <div class="theme-options">
+        <button class="theme-option" id="themeDark" data-theme="dark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+          Dark
+        </button>
+        <button class="theme-option" id="themeLight" data-theme="light">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          Light
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="save-toast" id="saveToast">Settings saved</div>
+
+  <script src="options.js"></script>
+</body>
+</html>

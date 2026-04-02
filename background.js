@@ -52,9 +52,12 @@ function getDomainName(url) {
         if (url.startsWith('edge://')) return 'Edge';
         if (url.startsWith('brave://')) return 'Brave';
         if (url.startsWith('about:')) return 'Browser';
+        if (url.startsWith('file://')) return 'Local File';
+        if (url.startsWith('data:') || url.startsWith('blob:')) return 'Other';
 
         // Remove www prefix
         hostname = hostname.replace(/^www\./, '');
+        if (!hostname) return 'Other';
 
         // Extract the main domain parts
         const parts = hostname.split('.');
@@ -171,12 +174,14 @@ async function fixUnnamedGroups(windowId) {
             // Fix if title is empty/missing OR doesn't match the dominant domain
             if (!group.title || group.title !== dominant.domain) {
                 console.log(`[TabManager:Fixer] Group ${group.id}: "${group.title || '(unnamed)'}" → "${dominant.domain}"`);
-                // Use retry logic — a single raw update() is often overwritten
-                // by Chrome/Brave's internal pipeline.
-                await updateGroupWithRetry(group.id, {
-                    title: dominant.domain,
-                    color: dominant.color
-                });
+                try {
+                    await chrome.tabGroups.update(group.id, {
+                        title: dominant.domain,
+                        color: dominant.color
+                    });
+                } catch (updateErr) {
+                    console.warn(`[TabManager:Fixer] Could not update group ${group.id}:`, updateErr);
+                }
             }
         }
     } catch (e) {
@@ -432,7 +437,9 @@ async function loadSettings() {
     return result.tabManagerSettings || {
         autoGroup: false,
         collapseByDefault: false,
-        groupSingleTabs: false
+        groupSingleTabs: false,
+        autoCloseDuplicates: false,
+        theme: 'dark'
     };
 }
 
@@ -670,13 +677,14 @@ async function ensureTabGrouped(tab) {
             }
         }
     } else {
-        // Only create new group if multiple tabs share domain
+        // Only create new group if multiple tabs share domain (or groupSingleTabs is enabled)
         const allTabs = await chrome.tabs.query({ windowId: tab.windowId });
         const sameDomainTabs = allTabs.filter(t =>
             getDomainName(t.url) === domain && !t.pinned
         );
+        const minGroupSize = settings.groupSingleTabs ? 1 : 2;
 
-        if (sameDomainTabs.length > 1) {
+        if (sameDomainTabs.length >= minGroupSize) {
             pendingGroupDomains.add(lockKey);
             try {
                 const tabIds = sameDomainTabs.map(t => t.id);
@@ -700,6 +708,12 @@ async function ensureTabGrouped(tab) {
 // Event listeners with cached settings check
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     const settings = await getCachedSettings();
+
+    // Auto-close duplicates on navigation complete
+    if (changeInfo.status === 'complete' && settings.autoCloseDuplicates) {
+        await autoCloseDuplicateTab(tab);
+    }
+
     if (!settings.autoGroup) return;
 
     // When a tab is UN-pinned, re-group it automatically
@@ -834,20 +848,16 @@ chrome.storage.onChanged.addListener(async (changes, areaName) => {
 chrome.runtime.onInstalled.addListener(async (details) => {
     if (details.reason === 'install') {
         await saveSettings({
-            autoGroup: true,
+            autoGroup: false,
             collapseByDefault: false,
-            groupSingleTabs: false
+            groupSingleTabs: false,
+            autoCloseDuplicates: false,
+            theme: 'dark'
         });
         invalidateSettingsCache();
 
-        // Start the periodic alarm on fresh install
-        await startPeriodicCheck();
-
-        // Group existing tabs
-        const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
-        for (const win of windows) {
-            await groupTabsByDomain(win.id);
-        }
+        // Open the welcome page so the user can opt in to auto-grouping
+        chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') });
     } else if (details.reason === 'update') {
         // Re-register alarm on extension update (SW restarts on update)
         const settings = await getCachedSettings();
@@ -864,6 +874,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     if (settings.autoGroup) {
         await startPeriodicCheck();
     }
+    await updateAllWindowBadges();
 })();
 
 // ============================================
@@ -890,5 +901,88 @@ chrome.tabGroups.onUpdated.addListener((group) => {
         scheduleFixUnnamed(group.windowId, 2000, 'on-cleared-3');
     }
 });
+
+// ============================================
+// EXTENSION ICON BADGE — live tab count
+// ============================================
+
+async function updateBadge(windowId) {
+    try {
+        let targetWindowId = windowId;
+        if (!targetWindowId) {
+            const win = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+            targetWindowId = win.id;
+        }
+        const tabs = await chrome.tabs.query({ windowId: targetWindowId });
+        const text = tabs.length > 99 ? '99+' : String(tabs.length);
+        await chrome.action.setBadgeText({ text, windowId: targetWindowId });
+        await chrome.action.setBadgeBackgroundColor({ color: '#1c4587', windowId: targetWindowId });
+    } catch (e) { /* Window may have closed */ }
+}
+
+async function updateAllWindowBadges() {
+    try {
+        const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
+        for (const win of windows) {
+            await updateBadge(win.id);
+        }
+    } catch (e) { /* Ignore */ }
+}
+
+chrome.tabs.onCreated.addListener((tab) => {
+    updateBadge(tab.windowId);
+});
+
+chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+    if (!removeInfo.isWindowClosing) {
+        updateBadge(removeInfo.windowId);
+    }
+});
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+    if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+        updateBadge(windowId);
+    }
+});
+
+// ============================================
+// AUTO-CLOSE DUPLICATE TABS ON OPEN
+// ============================================
+
+// Track tabs being closed by this extension to prevent infinite loops
+const recentlyClosedByExtension = new Set();
+
+async function autoCloseDuplicateTab(tab) {
+    if (!tab || tab.pinned || !tab.url) return;
+    if (
+        tab.url.startsWith('chrome://') ||
+        tab.url.startsWith('chrome-extension://') ||
+        tab.url.startsWith('about:') ||
+        tab.url.startsWith('edge://') ||
+        tab.url.startsWith('brave://')
+    ) return;
+
+    // Don't process a tab we just closed (loop prevention)
+    if (recentlyClosedByExtension.has(tab.id)) return;
+
+    try {
+        const allWindowTabs = await chrome.tabs.query({ windowId: tab.windowId });
+        const duplicates = allWindowTabs.filter(t => t.url === tab.url && !t.pinned);
+
+        if (duplicates.length > 1) {
+            // Keep the one with the lowest ID (oldest), close all newer duplicates
+            duplicates.sort((a, b) => a.id - b.id);
+            const toClose = duplicates.slice(1).map(t => t.id);
+            toClose.forEach(id => recentlyClosedByExtension.add(id));
+            await chrome.tabs.remove(toClose);
+            // Activate the kept tab
+            await chrome.tabs.update(duplicates[0].id, { active: true }).catch(() => {});
+            // Clean up tracking after a safe delay
+            setTimeout(() => toClose.forEach(id => recentlyClosedByExtension.delete(id)), 3000);
+        }
+    } catch (e) {
+        console.warn('[TabManager] autoCloseDuplicateTab error:', e);
+    }
+}
 
 console.log('Tab Manager Pro loaded (with background group-name fixer)');

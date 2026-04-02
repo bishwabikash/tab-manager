@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tab Manager Pro",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "Organize tabs by domain with automatic grouping, search, and duplicate detection — compatible with Chrome and Brave",
   "permissions": [
     "tabs",
@@ -21,6 +21,10 @@
   },
   "background": {
     "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
   },
   "icons": {
     "16": "icons/icon16.png",

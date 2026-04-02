@@ -22,7 +22,10 @@ function getDomainName(url) {
     if (url.startsWith('edge://')) return 'Edge';
     if (url.startsWith('brave://')) return 'Brave';
     if (url.startsWith('about:')) return 'Browser';
+    if (url.startsWith('file://')) return 'Local File';
+    if (url.startsWith('data:') || url.startsWith('blob:')) return 'Other';
     hostname = hostname.replace(/^www\./, '');
+    if (!hostname) return 'Other';
     const parts = hostname.split('.');
     let main = '';
     if (parts.length >= 2) {
@@ -56,7 +59,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const groupAllBtn = document.getElementById('groupAllBtn');
   const ungroupAllBtn = document.getElementById('ungroupAllBtn');
   const autoGroupToggle = document.getElementById('autoGroupToggle');
-  // Split view removed — chrome.tabs.splitViewId API does not exist in Chrome/Brave
+  const themeToggleBtn = document.getElementById('themeToggleBtn');
 
   // New elements
   const searchInput = document.getElementById('searchInput');
@@ -76,6 +79,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Store all tabs data for search filtering
   let allTabsData = null;
   let currentSearchQuery = '';
+  let currentSettings = { autoGroup: false, collapseByDefault: false, groupSingleTabs: false, autoCloseDuplicates: false, theme: 'dark' };
+  let collapsedDomains = new Set();   // domains the user has explicitly collapsed
+  let sortedDomains = new Set();      // domains sorted A-Z by the sort toggle
 
   // Get the BROWSER window ID — NOT the popup's own window.
   // chrome.windows.getCurrent() from a popup returns the popup window itself
@@ -92,6 +98,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   autoGroupToggle.addEventListener('change', handleAutoGroupToggle);
   findDuplicatesBtn.addEventListener('click', handleFindDuplicates);
   closeDuplicatesBtn.addEventListener('click', handleCloseAllDuplicates);
+  if (themeToggleBtn) themeToggleBtn.addEventListener('click', handleThemeToggle);
 
   // Search functionality
   searchInput.addEventListener('input', handleSearch);
@@ -106,8 +113,15 @@ document.addEventListener('DOMContentLoaded', async () => {
    * Switch between Tabs and History panels
    */
   function switchTab(tabName) {
-    tabNavBtns.forEach(btn => btn.classList.remove('active'));
-    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+    tabNavBtns.forEach(btn => {
+      btn.classList.remove('active');
+      btn.setAttribute('aria-selected', 'false');
+    });
+    const activeBtn = document.querySelector(`[data-tab="${tabName}"]`);
+    if (activeBtn) {
+      activeBtn.classList.add('active');
+      activeBtn.setAttribute('aria-selected', 'true');
+    }
 
     tabsPanel.classList.remove('active');
     historyPanel.classList.remove('active');
@@ -133,9 +147,15 @@ document.addEventListener('DOMContentLoaded', async () => {
    * Load user settings — reads chrome.storage.local directly (no SW round-trip)
    */
   async function loadSettings() {
-    const result = await chrome.storage.local.get('tabManagerSettings');
-    const settings = result.tabManagerSettings || { autoGroup: false };
+    const [settingsResult, collapsedResult] = await Promise.all([
+      chrome.storage.local.get('tabManagerSettings'),
+      chrome.storage.local.get('tabManagerCollapsed')
+    ]);
+    const settings = settingsResult.tabManagerSettings || { autoGroup: false, collapseByDefault: false, groupSingleTabs: false, autoCloseDuplicates: false, theme: 'dark' };
+    currentSettings = settings;
     autoGroupToggle.checked = settings.autoGroup || false;
+    collapsedDomains = new Set(collapsedResult.tabManagerCollapsed || []);
+    applyTheme(settings.theme || 'dark');
   }
 
   /**
@@ -158,8 +178,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (tab.url && (
           tab.url.startsWith('chrome://') ||
           tab.url.startsWith('chrome-extension://') ||
+          tab.url.startsWith('chrome-search://') ||
           tab.url.startsWith('about:') ||
           tab.url.startsWith('edge://') ||
+          tab.url.startsWith('devtools://') ||
           tab.url.startsWith('brave://')
         )) continue;
 
@@ -174,7 +196,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           favIconUrl: tab.favIconUrl,
           active: tab.active,
           pinned: tab.pinned,
-          groupId: tab.groupId
+          groupId: tab.groupId,
+          muted: tab.mutedInfo ? tab.mutedInfo.muted : false
         });
       }
 
@@ -223,6 +246,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     searchInput.focus();
   }
 
+  /**
+   * Apply light/dark theme by setting data-theme on <html>
+   */
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+  }
+
+  /**
+   * Handle theme toggle button click
+   */
+  async function handleThemeToggle() {
+    const newTheme = (currentSettings.theme === 'light') ? 'dark' : 'light';
+    const { tabManagerSettings = {} } = await chrome.storage.local.get('tabManagerSettings');
+    const updated = { ...tabManagerSettings, theme: newTheme };
+    await chrome.storage.local.set({ tabManagerSettings: updated });
+    currentSettings = { ...currentSettings, theme: newTheme };
+    applyTheme(newTheme);
+  }
+
+  /**
+   * Persist the current collapsed-domains set to storage
+   */
+  async function saveCollapsedDomains() {
+    await chrome.storage.local.set({ tabManagerCollapsed: Array.from(collapsedDomains) });
+  }
+
   // renderSplitViewTabs removed — split view API does not exist
 
   /**
@@ -267,11 +316,24 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    // Determine if groups should be collapsed (only when not searching)
-    const collapsedClass = searchQuery ? '' : 'collapsed';
+    domainList.innerHTML = filteredDomains.map(domain => {
+      // Collapse logic: when not searching, honor per-domain memory; fall back to collapseByDefault
+      let isCollapsed = false;
+      if (!searchQuery) {
+        if (collapsedDomains.has(domain.name)) {
+          isCollapsed = true;
+        } else if (!collapsedDomains.has('__expanded__:' + domain.name)) {
+          isCollapsed = currentSettings.collapseByDefault || false;
+        }
+      }
+      // Sort tabs A-Z within this group if toggled
+      const isSorted = sortedDomains.has(domain.name);
+      const displayTabs = isSorted
+        ? [...domain.tabs].sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+        : domain.tabs;
 
-    domainList.innerHTML = filteredDomains.map(domain => `
-      <div class="domain-group ${collapsedClass}" data-domain="${escapeHtml(domain.name)}">
+      return `
+      <div class="domain-group ${isCollapsed ? 'collapsed' : ''}" data-domain="${escapeHtml(domain.name)}">
         <div class="domain-header">
           <div class="domain-info">
             <span class="domain-color color-${domain.color}"></span>
@@ -279,26 +341,32 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
           <div class="domain-meta">
             <span class="domain-count">${domain.tabs.length}</span>
+            <button class="sort-btn${isSorted ? ' active' : ''}" data-domain="${escapeHtml(domain.name)}" title="${isSorted ? 'Unsort' : 'Sort A-Z'}" aria-label="${isSorted ? 'Unsort tabs' : 'Sort tabs A to Z'}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18M7 12h10M11 18h2"/>
+              </svg>
+            </button>
             <svg class="collapse-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M6 9l6 6 6-6"/>
             </svg>
           </div>
         </div>
         <div class="domain-tabs">
-          ${domain.tabs.map(tab => createTabItem(tab, false, searchQuery)).join('')}
+          ${displayTabs.map(tab => createTabItem(tab, false, searchQuery)).join('')}
         </div>
       </div>
-    `).join('');
+    `}).join('');
 
     // Attach click listeners
     attachTabClickListeners(domainList);
     attachDomainHeaderListeners();
+    attachSortBtnListeners();
   }
 
   /**
    * Create HTML for a single tab item with optional search highlighting
    */
-  function createTabItem(tab, showSplitBadge = false, searchQuery = '') {
+  function createTabItem(tab, _unused = false, searchQuery = '') {
     // Filter out chrome:// URLs for favicons (can't load internal resources)
     const validFavicon = tab.favIconUrl && !tab.favIconUrl.startsWith('chrome://');
     const favicon = validFavicon
@@ -306,6 +374,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       : getFaviconPlaceholder();
 
     const activeClass = tab.active ? 'active' : '';
+    const mutedClass = tab.muted ? 'muted' : '';
     const pinnedIcon = tab.pinned ? `
       <span class="tab-pinned" title="Pinned">
         <svg viewBox="0 0 24 24" fill="currentColor">
@@ -314,15 +383,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       </span>
     ` : '';
 
-    const splitBadge = showSplitBadge ? `
-      <span class="split-view-badge">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="2" y="3" width="20" height="18" rx="2"/>
-          <path d="M12 3v18"/>
-        </svg>
-        Split
-      </span>
-    ` : '';
+    const muteTitle = tab.muted ? 'Unmute tab' : 'Mute tab';
+    const muteBtn = `
+      <button class="tab-action-btn mute-tab${tab.muted ? ' active' : ''}" data-tab-id="${tab.id}" data-muted="${tab.muted ? 'true' : 'false'}" title="${muteTitle}" aria-label="${muteTitle}">
+        ${tab.muted
+          ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`
+          : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`
+        }
+      </button>
+    `;
 
     // Highlight search matches in title
     let displayTitle = escapeHtml(tab.title || 'New Tab');
@@ -332,13 +401,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     return `
-      <div class="tab-item ${activeClass}" data-tab-id="${tab.id}" title="${escapeHtml(tab.title)}">
+      <div class="tab-item ${activeClass} ${mutedClass}" data-tab-id="${tab.id}" title="${escapeHtml(tab.title)}">
         ${favicon}
         <span class="tab-title">${displayTitle}</span>
         ${pinnedIcon}
-        ${splitBadge}
         <div class="tab-actions">
-          <button class="tab-action-btn close-tab" data-tab-id="${tab.id}" title="Close tab">
+          ${muteBtn}
+          <button class="tab-action-btn close-tab" data-tab-id="${tab.id}" title="Close tab" aria-label="Close tab">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
@@ -374,19 +443,44 @@ document.addEventListener('DOMContentLoaded', async () => {
   function attachTabClickListeners(container) {
     container.querySelectorAll('.tab-item').forEach(item => {
       item.addEventListener('click', async (e) => {
+        // Check if mute button was clicked
+        if (e.target.closest('.mute-tab')) {
+          e.stopPropagation();
+          const btn = e.target.closest('.mute-tab');
+          const tabId = parseInt(btn.dataset.tabId);
+          const isMuted = btn.dataset.muted === 'true';
+          try {
+            await chrome.tabs.update(tabId, { muted: !isMuted });
+            await loadTabs();
+          } catch (err) {
+            console.error('Error toggling mute:', err);
+          }
+          return;
+        }
+
         // Check if close button was clicked
         if (e.target.closest('.close-tab')) {
           e.stopPropagation();
           const tabId = parseInt(e.target.closest('.close-tab').dataset.tabId);
-          await chrome.tabs.remove(tabId);
-          await loadTabs();
+          try {
+            await chrome.tabs.remove(tabId);
+            await loadTabs();
+          } catch (err) {
+            console.error('Error closing tab:', err);
+            await loadTabs(); // reload anyway to sync state
+          }
           return;
         }
 
         // Switch to clicked tab
         const tabId = parseInt(item.dataset.tabId);
-        await chrome.tabs.update(tabId, { active: true });
-        window.close();
+        try {
+          await chrome.tabs.update(tabId, { active: true });
+          window.close();
+        } catch (err) {
+          console.error('Error switching to tab:', err);
+          await loadTabs(); // tab may no longer exist — refresh
+        }
       });
     });
 
@@ -399,13 +493,46 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   /**
-   * Attach click listeners to domain headers for collapse
+   * Attach click listeners to domain headers for collapse/expand
    */
   function attachDomainHeaderListeners() {
     document.querySelectorAll('.domain-header').forEach(header => {
-      header.addEventListener('click', () => {
+      header.addEventListener('click', (e) => {
+        // Don't collapse if sort button was clicked
+        if (e.target.closest('.sort-btn')) return;
         const group = header.parentElement;
-        group.classList.toggle('collapsed');
+        const domain = group.dataset.domain;
+        const nowCollapsed = !group.classList.contains('collapsed');
+        group.classList.toggle('collapsed', nowCollapsed);
+        // Persist: track collapsed domains
+        if (nowCollapsed) {
+          collapsedDomains.add(domain);
+          collapsedDomains.delete('__expanded__:' + domain);
+        } else {
+          collapsedDomains.delete(domain);
+          collapsedDomains.add('__expanded__:' + domain);
+        }
+        saveCollapsedDomains();
+      });
+    });
+  }
+
+  /**
+   * Attach click listeners to sort buttons in domain headers
+   */
+  function attachSortBtnListeners() {
+    document.querySelectorAll('.sort-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const domain = btn.dataset.domain;
+        if (sortedDomains.has(domain)) {
+          sortedDomains.delete(domain);
+        } else {
+          sortedDomains.add(domain);
+        }
+        if (allTabsData) {
+          renderDomainGroups(allTabsData.domains, currentSearchQuery);
+        }
       });
     });
   }
@@ -426,29 +553,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     autoGroupToggle.checked = true;
 
     // Pass real windowId — background SW cannot resolve WINDOW_ID_CURRENT (-2)
-    await sendMessage('groupTabs', { windowId: currentWindowId });
-
-    // DEBUG: verify what Brave actually stored for group titles
-    const groups = await chrome.tabGroups.query({ windowId: currentWindowId });
-    console.log('[TabManager popup] Groups after grouping:',
-      groups.map(g => `id=${g.id} title="${g.title}" color=${g.color} collapsed=${g.collapsed}`).join(' | ')
-    );
+    const response = await sendMessage('groupTabs', { windowId: currentWindowId });
+    const success = response && response.success;
 
     await loadTabs();
 
     groupAllBtn.disabled = false;
-    groupAllBtn.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="20 6 9 17 4 12"></polyline>
-      </svg>
-    `;
-    setTimeout(() => {
+    if (success) {
       groupAllBtn.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 5v14M5 12h14"/>
+          <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
       `;
-    }, 2000);
+      setTimeout(() => {
+        groupAllBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+        `;
+      }, 2000);
+    } else {
+      groupAllBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      `;
+      groupAllBtn.title = 'Grouping failed — try again';
+      setTimeout(() => {
+        groupAllBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+        `;
+        groupAllBtn.title = 'Group All';
+      }, 2000);
+    }
   }
 
   /**
@@ -646,9 +785,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
           const sessionId = btn.dataset.sessionId;
-          await chrome.sessions.restore(sessionId);
-          await loadRecentlyClosed();
-          await loadTabs();
+          try {
+            await chrome.sessions.restore(sessionId);
+            await loadRecentlyClosed();
+            await loadTabs();
+          } catch (err) {
+            console.error('Error restoring session:', err);
+            const item = btn.closest('.tab-item');
+            if (item) {
+              const oldText = btn.innerHTML;
+              btn.textContent = '!';
+              btn.title = 'Restore failed';
+              setTimeout(() => { btn.innerHTML = oldText; btn.title = 'Restore'; }, 2000);
+            }
+          }
         });
       });
 

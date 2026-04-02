@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to Tab Manager Pro</title>
+  <style>
+    :root {
+      --primary: #a8c7fa;
+      --primary-container: #1c4587;
+      --surface: #131316;
+      --surface-container: #1e1f23;
+      --surface-container-high: #282a2e;
+      --on-surface: #e3e2e6;
+      --on-surface-variant: #c4c6cf;
+      --outline-variant: #44464f;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Roboto, 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--surface);
+      color: var(--on-surface);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .card {
+      background: var(--surface-container);
+      border-radius: 20px;
+      padding: 48px 56px;
+      max-width: 520px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+    .logo svg {
+      width: 40px;
+      height: 40px;
+      color: var(--primary);
+    }
+    .logo h1 {
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--on-surface);
+    }
+    .tagline {
+      font-size: 15px;
+      color: var(--on-surface-variant);
+      line-height: 1.6;
+      margin-bottom: 36px;
+    }
+    .features {
+      list-style: none;
+      text-align: left;
+      margin-bottom: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .features li {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--on-surface-variant);
+      line-height: 1.5;
+    }
+    .features li svg {
+      width: 18px;
+      height: 18px;
+      color: var(--primary);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .btn-primary {
+      padding: 14px 28px;
+      background: var(--primary);
+      color: #062e6f;
+      border: none;
+      border-radius: 9999px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter 0.15s;
+    }
+    .btn-primary:hover { filter: brightness(1.1); }
+    .btn-secondary {
+      padding: 14px 28px;
+      background: transparent;
+      color: var(--primary);
+      border: 1px solid var(--outline-variant);
+      border-radius: 9999px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-secondary:hover { background: var(--surface-container-high); }
+    .done {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+    .done svg {
+      width: 56px;
+      height: 56px;
+      color: #81c995;
+    }
+    .done p {
+      font-size: 16px;
+      color: var(--on-surface-variant);
+    }
+    .shortcuts {
+      margin-top: 32px;
+      padding: 14px;
+      border-radius: 10px;
+      background: var(--surface-container-high);
+      font-size: 12px;
+      color: var(--on-surface-variant);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="2" width="8" height="8" rx="2" fill="currentColor" opacity="0.9"/>
+        <rect x="14" y="2" width="8" height="8" rx="2" fill="currentColor" opacity="0.7"/>
+        <rect x="2" y="14" width="8" height="8" rx="2" fill="currentColor" opacity="0.7"/>
+        <rect x="14" y="14" width="8" height="8" rx="2" fill="currentColor" opacity="0.4"/>
+      </svg>
+      <h1>Tab Manager Pro</h1>
+    </div>
+
+    <p class="tagline">
+      Automatically organise your tabs by website, find duplicates, and keep your browser clutter-free — all locally, no data ever leaves your device.
+    </p>
+
+    <ul class="features">
+      <li>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        <span><strong>Auto-grouping</strong> — tabs from the same site are grouped with a colour label automatically</span>
+      </li>
+      <li>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        <span><strong>Duplicate detection</strong> — find and close duplicate tabs in one click, or automatically</span>
+      </li>
+      <li>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        <span><strong>Recently closed</strong> — restore any recently closed tab or window from the History panel</span>
+      </li>
+      <li>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        <span><strong>Mute &amp; sort</strong> — mute noisy tabs and sort groups alphabetically right from the popup</span>
+      </li>
+    </ul>
+
+    <div class="actions" id="actions">
+      <button class="btn-primary" id="enableAutoGroup">
+        Enable Auto-Grouping
+      </button>
+      <button class="btn-secondary" id="skipAutoGroup">
+        I'll manage tabs manually
+      </button>
+    </div>
+
+    <div class="done" id="done">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+      <p>All set! You can change settings any time via the extension options.</p>
+    </div>
+
+    <div class="shortcuts">
+      <strong>Keyboard shortcuts:</strong> &nbsp;Ctrl+Shift+G to group &nbsp;·&nbsp; Ctrl+Shift+U to ungroup
+    </div>
+  </div>
+  <script src="welcome.js"></script>
+</body>
+</html>
