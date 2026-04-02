@@ -86,11 +86,35 @@ jobs:
       - name: Verify zip contents
         run: unzip -l extension.zip
 
-      - name: Upload to Chrome Web Store
-        uses: fregante/chrome-webstore-upload-action@v2
-        with:
-          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
-          client-id: ${{ secrets.CHROME_CLIENT_ID }}
-          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
-          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
-          file-name: extension.zip
+      - name: Upload & publish to Chrome Web Store
+        env:
+          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+        run: |
+          # Exchange refresh token for an access token
+          ACCESS_TOKEN=$(curl -s -X POST https://oauth2.googleapis.com/token \
+            -d "client_id=${CLIENT_ID}" \
+            -d "client_secret=${CLIENT_SECRET}" \
+            -d "refresh_token=${REFRESH_TOKEN}" \
+            -d "grant_type=refresh_token" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+          # Upload the new zip
+          UPLOAD_RESPONSE=$(curl -s -X PUT \
+            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/${EXTENSION_ID}" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -H "x-goog-api-version: 2" \
+            -T extension.zip)
+          echo "Upload response: $UPLOAD_RESPONSE"
+          echo "$UPLOAD_RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); exit(0 if r.get('uploadState')=='SUCCESS' else 1)"
+
+          # Publish to all users
+          PUBLISH_RESPONSE=$(curl -s -X POST \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}/publish" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -H "x-goog-api-version: 2" \
+            -H "Content-Length: 0")
+          echo "Publish response: $PUBLISH_RESPONSE"
+          echo "$PUBLISH_RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); statuses=r.get('status',[]); print(statuses); exit(0 if any(s in ['OK','PUBLISHED_SUCCESSFULLY','ITEM_PENDING_REVIEW'] for s in statuses) else 1)"
