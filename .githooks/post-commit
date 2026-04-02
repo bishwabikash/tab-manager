@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# After each commit, read the version from manifest.json, create a tag if it
+# doesn't already exist, and push it — which triggers the CWS publish workflow.
+
+set -e
+
+VERSION=$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")
+TAG="v${VERSION}"
+
+if git rev-parse "$TAG" >/dev/null 2>&1; then
+  echo "[post-commit] Tag $TAG already exists — skipping."
+else
+  echo "[post-commit] Creating and pushing tag $TAG"
+  git tag "$TAG"
+  git push origin "$TAG"
+fi
