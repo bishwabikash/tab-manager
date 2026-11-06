@@ -67,8 +67,8 @@
                         <circle cx="11" cy="11" r="8" />
                         <path d="M21 21l-4.35-4.35" />
                     </svg>
-                    <input type="text" id="searchInput" class="search-input" placeholder="Search tabs...">
-                    <button class="search-clear" id="searchClear" style="display: none;">
+                    <input type="search" id="searchInput" class="search-input" placeholder="Search tabs..." aria-label="Search tabs">
+                    <button class="search-clear" id="searchClear" style="display: none;" title="Clear search" aria-label="Clear search">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M18 6L6 18M6 6l12 12" />
                         </svg>
@@ -97,7 +97,8 @@
                     </button>
                 </div>
 
-                <label class="toggle-label" title="Auto-group new tabs" aria-label="Auto-group new tabs">
+                <label class="toggle-label" title="Auto-group new tabs">
+                    <span class="toggle-text">Auto-group</span>
                     <input type="checkbox" id="autoGroupToggle" class="toggle-input" aria-label="Auto-group new tabs">
                     <span class="toggle-switch"></span>
                 </label>
@@ -156,7 +157,7 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <div class="shortcuts">Ctrl+Shift+G group • Ctrl+Shift+U ungroup</div>
+            <div class="shortcuts" id="shortcuts" hidden></div>
             <a href="https://www.buymeacoffee.com/nobodybutheader" target="_blank" class="bmc-button">
                 <svg viewBox="0 0 24 24" fill="currentColor">
                     <path

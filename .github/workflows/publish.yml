@@ -30,13 +30,9 @@
 #        https://developer.chrome.com/docs/webstore/using-api/
 #
 # TRIGGER NOTES:
-#   This workflow fires on BOTH a version-tag push AND a GitHub
-#   release publish. If you create a release from the GitHub UI
-#   while targeting a new tag, both events fire for the same
-#   commit and the upload will run twice.
-#   Recommendation: pick ONE workflow in your release process —
-#   either always push a tag directly, or always use GitHub
-#   Releases — to avoid duplicate uploads.
+#   Runs on version-tag pushes only (the post-commit hook pushes
+#   them from main). Creating a GitHub Release for a new tag also
+#   pushes that tag, so releases still publish exactly once.
 # ============================================================
 
 name: Publish to Chrome Web Store
@@ -45,19 +41,19 @@ on:
   push:
     tags:
       - 'v[0-9]*.[0-9]*.[0-9]*'
-  release:
-    types: [published]
 
-# Prevent concurrent publish runs for the same ref so a
-# tag-push + release-published double-trigger queues rather
-# than races. The first run wins; the second is a no-op upload.
+# Never run two publishes for the same tag at once.
 concurrency:
   group: cws-publish-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
   publish:
     name: Build & publish extension
+    needs: test
     runs-on: ubuntu-latest
 
     # Minimal permissions — read-only checkout is all we need.
@@ -76,9 +72,13 @@ jobs:
           zip -r extension.zip \
             background.js \
             manifest.json \
+            options.html \
+            options.js \
             popup.css \
             popup.html \
             popup.js \
+            welcome.html \
+            welcome.js \
             icons/
 
       # Verify the zip was created and show its contents as a

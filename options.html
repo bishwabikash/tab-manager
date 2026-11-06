@@ -91,7 +91,9 @@
     }
     /* Toggle */
     .toggle-wrap { display: flex; align-items: center; padding-top: 2px; }
-    .toggle-input { display: none; }
+    .toggle-input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+    .toggle-input:focus-visible + .toggle-switch { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .theme-option:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
     .toggle-switch {
       position: relative;
       width: 40px;
@@ -227,7 +229,7 @@
     <label class="setting-row">
       <div class="setting-info">
         <div class="setting-label">Auto-close duplicate tabs</div>
-        <div class="setting-desc">When you navigate to a URL that's already open in the window, the new duplicate tab is automatically closed and the existing tab is focused.</div>
+        <div class="setting-desc">When you navigate to a URL that's already open in the window, the new duplicate tab is automatically closed. If you were looking at it, you're switched to the existing tab.</div>
       </div>
       <div class="toggle-wrap">
         <input type="checkbox" id="autoCloseDuplicates" class="toggle-input">
