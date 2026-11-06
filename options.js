@@ -24,8 +24,9 @@ async function loadSettings() {
 }
 
 async function saveSetting(key, value) {
-  currentSettings[key] = value;
-  await chrome.storage.local.set({ tabManagerSettings: { ...currentSettings } });
+  const result = await chrome.storage.local.get('tabManagerSettings');
+  currentSettings = { ...DEFAULTS, ...(result.tabManagerSettings || {}), [key]: value };
+  await chrome.storage.local.set({ tabManagerSettings: currentSettings });
   showToast();
 }
 
@@ -44,6 +45,10 @@ function showToast() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.tabManagerSettings) loadSettings();
+  });
 
   // Wire up toggle checkboxes
   for (const id of TOGGLE_IDS) {

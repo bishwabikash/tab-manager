@@ -20,8 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       if (autoGroup) {
-        // Kick off grouping in all open windows via the background SW
-        chrome.runtime.sendMessage({ action: 'groupTabs' }).catch(() => {});
+        chrome.runtime.sendMessage({ action: 'groupAllWindows' }).catch(() => {});
       }
     } catch (e) {
       console.error('Welcome: could not save setting', e);

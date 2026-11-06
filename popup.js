@@ -26,6 +26,7 @@ function getDomainName(url) {
     if (url.startsWith('data:') || url.startsWith('blob:')) return 'Other';
     hostname = hostname.replace(/^www\./, '');
     if (!hostname) return 'Other';
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.startsWith('[')) return hostname;
     const parts = hostname.split('.');
     let main = '';
     if (parts.length >= 2) {
@@ -49,6 +50,20 @@ function getDomainColor(domain) {
     hash = hash & hash;
   }
   return GROUP_COLORS[Math.abs(hash) % GROUP_COLORS.length];
+}
+
+const DUPLICATE_SKIP_PREFIXES = ['chrome://', 'chrome-extension://', 'about:', 'edge://', 'brave://'];
+
+function collectDuplicates(tabs) {
+  const urlMap = new Map();
+  for (const tab of tabs) {
+    if (tab.pinned || !tab.url || DUPLICATE_SKIP_PREFIXES.some(p => tab.url.startsWith(p))) continue;
+    if (!urlMap.has(tab.url)) urlMap.set(tab.url, { url: tab.url, title: tab.title, favIconUrl: tab.favIconUrl, tabIds: [] });
+    urlMap.get(tab.url).tabIds.push(tab.id);
+  }
+  return Array.from(urlMap.values())
+    .filter(d => d.tabIds.length > 1)
+    .map(d => ({ ...d, count: d.tabIds.length }));
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -89,8 +104,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // getLastFocused({windowTypes:['normal']}) explicitly returns the correct window.
   const { id: currentWindowId } = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
 
+  const SPINNER = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div>';
+
   // Load settings and tabs in PARALLEL — direct API calls, no SW round-trip
-  await Promise.all([loadSettings(), loadTabs()]);
+  await Promise.all([loadSettings(), loadTabs(), loadShortcuts()]);
 
   // Event Listeners
   groupAllBtn.addEventListener('click', handleGroupAll);
@@ -141,6 +158,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage({ action, ...data }, resolve);
     });
+  }
+
+  async function loadShortcuts() {
+    const shortcutsEl = document.getElementById('shortcuts');
+    const labels = { 'group-all-tabs': 'group', 'ungroup-all-tabs': 'ungroup' };
+    const commands = await chrome.commands.getAll();
+    const parts = commands
+      .filter(c => labels[c.name] && c.shortcut)
+      .map(c => `${c.shortcut} ${labels[c.name]}`);
+    shortcutsEl.textContent = parts.join(' • ');
+    shortcutsEl.hidden = parts.length === 0;
   }
 
   /**
@@ -207,6 +235,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       allTabsData = result;
       tabCount.textContent = `${result.totalTabs} tab${result.totalTabs !== 1 ? 's' : ''}`;
       renderDomainGroups(result.domains, currentSearchQuery);
+      if (duplicatesSection.style.display !== 'none') renderDuplicates(tabs);
 
     } catch (error) {
       console.error('Error loading tabs:', error);
@@ -225,7 +254,7 @@ document.addEventListener('DOMContentLoaded', async () => {
    * Handle search input
    */
   function handleSearch(e) {
-    currentSearchQuery = e.target.value.toLowerCase().trim();
+    currentSearchQuery = e.target.value.trim();
     searchClear.style.display = currentSearchQuery ? 'flex' : 'none';
 
     if (allTabsData) {
@@ -295,9 +324,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     let filteredDomains = domains;
     if (searchQuery) {
       filteredDomains = domains.map(domain => {
+        const query = searchQuery.toLowerCase();
         const filteredTabs = domain.tabs.filter(tab =>
-          tab.title.toLowerCase().includes(searchQuery) ||
-          tab.url.toLowerCase().includes(searchQuery)
+          tab.title.toLowerCase().includes(query) ||
+          (tab.url || '').toLowerCase().includes(query)
         );
         return filteredTabs.length > 0 ? { ...domain, tabs: filteredTabs } : null;
       }).filter(Boolean);
@@ -334,7 +364,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       return `
       <div class="domain-group ${isCollapsed ? 'collapsed' : ''}" data-domain="${escapeHtml(domain.name)}">
-        <div class="domain-header">
+        <div class="domain-header" tabindex="0" role="button" aria-expanded="${isCollapsed ? 'false' : 'true'}">
           <div class="domain-info">
             <span class="domain-color color-${domain.color}"></span>
             <span class="domain-name">${escapeHtml(domain.name)}</span>
@@ -394,14 +424,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     `;
 
     // Highlight search matches in title
-    let displayTitle = escapeHtml(tab.title || 'New Tab');
-    if (searchQuery) {
-      const regex = new RegExp(`(${escapeRegex(searchQuery)})`, 'gi');
-      displayTitle = displayTitle.replace(regex, '<span class="search-highlight">$1</span>');
-    }
+    const rawTitle = tab.title || 'New Tab';
+    const displayTitle = searchQuery
+      ? rawTitle.split(new RegExp(`(${escapeRegex(searchQuery)})`, 'gi'))
+        .map((part, i) => i % 2 ? `<span class="search-highlight">${escapeHtml(part)}</span>` : escapeHtml(part))
+        .join('')
+      : escapeHtml(rawTitle);
 
     return `
-      <div class="tab-item ${activeClass} ${mutedClass}" data-tab-id="${tab.id}" title="${escapeHtml(tab.title)}">
+      <div class="tab-item ${activeClass} ${mutedClass}" data-tab-id="${tab.id}" title="${escapeHtml(tab.title)}" tabindex="0" role="button">
         ${favicon}
         <span class="tab-title">${displayTitle}</span>
         ${pinnedIcon}
@@ -437,11 +468,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     `;
   }
 
+  function onActivateKey(el) {
+    el.addEventListener('keydown', (e) => {
+      if (e.target !== el || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault();
+      el.click();
+    });
+  }
+
   /**
    * Attach click listeners to tab items
    */
   function attachTabClickListeners(container) {
     container.querySelectorAll('.tab-item').forEach(item => {
+      onActivateKey(item);
       item.addEventListener('click', async (e) => {
         // Check if mute button was clicked
         if (e.target.closest('.mute-tab')) {
@@ -497,6 +537,7 @@ document.addEventListener('DOMContentLoaded', async () => {
    */
   function attachDomainHeaderListeners() {
     document.querySelectorAll('.domain-header').forEach(header => {
+      onActivateKey(header);
       header.addEventListener('click', (e) => {
         // Don't collapse if sort button was clicked
         if (e.target.closest('.sort-btn')) return;
@@ -504,6 +545,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const domain = group.dataset.domain;
         const nowCollapsed = !group.classList.contains('collapsed');
         group.classList.toggle('collapsed', nowCollapsed);
+        header.setAttribute('aria-expanded', nowCollapsed ? 'false' : 'true');
         // Persist: track collapsed domains
         if (nowCollapsed) {
           collapsedDomains.add(domain);
@@ -542,10 +584,7 @@ document.addEventListener('DOMContentLoaded', async () => {
    */
   async function handleGroupAll() {
     groupAllBtn.disabled = true;
-    groupAllBtn.innerHTML = `
-      <div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div>
-      Grouping...
-    `;
+    groupAllBtn.innerHTML = SPINNER;
 
     // Enable auto-group — write directly to storage
     const { tabManagerSettings = {} } = await chrome.storage.local.get('tabManagerSettings');
@@ -585,7 +624,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <path d="M12 5v14M5 12h14"/>
           </svg>
         `;
-        groupAllBtn.title = 'Group All';
+        groupAllBtn.title = 'Group all tabs';
       }, 2000);
     }
   }
@@ -595,10 +634,7 @@ document.addEventListener('DOMContentLoaded', async () => {
    */
   async function handleUngroupAll() {
     ungroupAllBtn.disabled = true;
-    ungroupAllBtn.innerHTML = `
-      <div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div>
-      Ungrouping...
-    `;
+    ungroupAllBtn.innerHTML = SPINNER;
 
     // Pass real windowId — background SW cannot resolve WINDOW_ID_CURRENT (-2)
     await sendMessage('ungroupTabs', { windowId: currentWindowId });
@@ -637,47 +673,41 @@ document.addEventListener('DOMContentLoaded', async () => {
    * Find duplicate tabs
    */
   async function handleFindDuplicates() {
-    // Run duplicate detection directly in popup — no SW needed
     const tabs = await chrome.tabs.query({ windowId: currentWindowId });
-    const urlMap = new Map();
-    for (const tab of tabs) {
-      if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') ||
-        tab.url.startsWith('about:') || tab.url.startsWith('edge://') || tab.url.startsWith('brave://')) continue;
-      if (!urlMap.has(tab.url)) urlMap.set(tab.url, { tabs: [], title: tab.title, favIconUrl: tab.favIconUrl });
-      urlMap.get(tab.url).tabs.push(tab.id);
-    }
-    const duplicates = [];
-    for (const [url, data] of urlMap.entries()) {
-      if (data.tabs.length > 1) duplicates.push({ url, title: data.title, favIconUrl: data.favIconUrl, count: data.tabs.length, tabIds: data.tabs });
-    }
-    const result = { success: true, duplicates };
+    if (renderDuplicates(tabs)) return;
 
-    if (!result.success || result.duplicates.length === 0) {
-      duplicatesSection.style.display = 'none';
-      // Show a brief message
+    findDuplicatesBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 6L9 17l-5-5"/>
+      </svg>
+    `;
+    findDuplicatesBtn.title = 'No duplicates found!';
+    setTimeout(() => {
       findDuplicatesBtn.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20 6L9 17l-5-5"/>
+          <rect x="8" y="8" width="12" height="12" rx="2"/>
+          <path d="M4 16V4h12"/>
         </svg>
       `;
-      findDuplicatesBtn.title = 'No duplicates found!';
-      setTimeout(() => {
-        findDuplicatesBtn.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="8" y="8" width="12" height="12" rx="2"/>
-            <path d="M4 16V4h12"/>
-          </svg>
-        `;
-        findDuplicatesBtn.title = 'Find Duplicates';
-      }, 2000);
-      return;
+      findDuplicatesBtn.title = 'Find duplicate tabs';
+    }, 2000);
+  }
+
+  /**
+   * Show the duplicates section for the given tabs, or hide it if there are none.
+   * @returns {boolean} true if duplicates were found
+   */
+  function renderDuplicates(tabs) {
+    const duplicates = collectDuplicates(tabs);
+    if (duplicates.length === 0) {
+      duplicatesSection.style.display = 'none';
+      return false;
     }
 
-    // Show duplicates section
     duplicatesSection.style.display = 'block';
-    duplicateCount.textContent = result.duplicates.length;
+    duplicateCount.textContent = duplicates.length;
 
-    duplicateList.innerHTML = result.duplicates.map(dup => `
+    duplicateList.innerHTML = duplicates.map(dup => `
       <div class="duplicate-item" data-url="${escapeHtml(dup.url)}">
         <div class="duplicate-info">
           ${dup.favIconUrl ? `<img class="tab-favicon" src="${escapeHtml(dup.favIconUrl)}" alt="">` : getFaviconPlaceholder()}
@@ -686,6 +716,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         <span class="duplicate-badge">${dup.count}×</span>
       </div>
     `).join('');
+    return true;
   }
 
   /**
@@ -695,23 +726,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     closeDuplicatesBtn.disabled = true;
     closeDuplicatesBtn.textContent = 'Closing...';
 
-    // Close duplicates directly — no SW needed
     const tabs = await chrome.tabs.query({ windowId: currentWindowId });
-    const urlMap = new Map();
-    for (const tab of tabs) {
-      if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') ||
-        tab.url.startsWith('about:') || tab.url.startsWith('edge://') || tab.url.startsWith('brave://')) continue;
-      if (!urlMap.has(tab.url)) urlMap.set(tab.url, []);
-      urlMap.get(tab.url).push(tab.id);
-    }
-    const toClose = [];
-    for (const ids of urlMap.values()) { if (ids.length > 1) toClose.push(...ids.slice(1)); }
-    if (toClose.length > 0) await chrome.tabs.remove(toClose);
+    const toClose = collectDuplicates(tabs).flatMap(d => d.tabIds.slice(1));
+    if (toClose.length > 0) await chrome.tabs.remove(toClose).catch(err => console.error('Error closing duplicates:', err));
 
     duplicatesSection.style.display = 'none';
     await loadTabs();
     closeDuplicatesBtn.disabled = false;
-    closeDuplicatesBtn.textContent = 'Close All Duplicates';
+    closeDuplicatesBtn.textContent = 'Close All';
   }
 
   /**
@@ -763,13 +785,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const isWindow = item.type === 'window';
 
         return `
-          <div class="tab-item" data-session-id="${item.sessionId}" title="${escapeHtml(item.title)}">
+          <div class="tab-item" data-session-id="${escapeHtml(item.sessionId)}" title="${escapeHtml(item.title)}">
             ${validFavicon ? `<img class="tab-favicon" src="${escapeHtml(item.favIconUrl)}" alt="">` : getFaviconPlaceholder()}
             <div class="tab-info" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;">
               <span class="tab-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(item.title || 'Untitled')}</span>
               ${isWindow ? `<span class="window-badge">Window</span>` : ''}
             </div>
-            <button class="restore-btn" data-session-id="${item.sessionId}" title="${isWindow ? 'Restore entire window' : 'Restore tab'}">
+            <button class="restore-btn" data-session-id="${escapeHtml(item.sessionId)}" title="${isWindow ? 'Restore entire window' : 'Restore tab'}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
                 <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
                 <path d="M21 3v5h-5"></path>
@@ -794,9 +816,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             const item = btn.closest('.tab-item');
             if (item) {
               const oldText = btn.innerHTML;
+              const oldTitle = btn.title;
               btn.textContent = '!';
               btn.title = 'Restore failed';
-              setTimeout(() => { btn.innerHTML = oldText; btn.title = 'Restore'; }, 2000);
+              setTimeout(() => { btn.innerHTML = oldText; btn.title = oldTitle; }, 2000);
             }
           }
         });
@@ -825,9 +848,12 @@ document.addEventListener('DOMContentLoaded', async () => {
    * Escape HTML to prevent XSS
    */
   function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (text === null || text === undefined) return '';
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 });

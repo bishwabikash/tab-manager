@@ -4,6 +4,11 @@
 
 set -e
 
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$BRANCH" != "main" ]; then
+  exit 0
+fi
+
 VERSION=$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")
 TAG="v${VERSION}"
 
