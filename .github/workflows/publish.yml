@@ -36,7 +36,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    name: Verify release tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: .github/scripts/verify-release-tag.sh
+
   test:
+    needs: verify
     uses: ./.github/workflows/test.yml
 
   publish:

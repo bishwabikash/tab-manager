@@ -81,3 +81,33 @@ test('post-commit hook only tags and pushes from main', () => {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.rmSync(remote, { recursive: true, force: true });
 });
+
+test('release tag check accepts only v<manifest version> on main', () => {
+    const remote = fs.mkdtempSync(path.join(os.tmpdir(), 'tab-manager-remote-'));
+    execFileSync('git', ['init', '-q', '--bare', '-b', 'main', remote]);
+    const { dir, git } = makeRepo();
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ version: '1.6.0' }));
+    git('commit', '-qam', 'bump', '--no-verify');
+    git('remote', 'add', 'origin', remote);
+    git('push', '-q', 'origin', 'main');
+
+    const verify = (tag) => spawnSync('bash', [path.join(EXTENSION_PATH, '.github/scripts/verify-release-tag.sh')], {
+        cwd: dir, encoding: 'utf8', env: { ...process.env, GITHUB_REF_NAME: tag }
+    });
+
+    const ok = verify('v1.6.0');
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+
+    const mismatched = verify('v1.7.0');
+    assert.equal(mismatched.status, 1);
+    assert.match(mismatched.stdout, /does not match manifest\.json version 1\.6\.0/);
+
+    git('checkout', '-q', '-b', 'feature');
+    git('commit', '-q', '--allow-empty', '-m', 'unmerged', '--no-verify');
+    const offMain = verify('v1.6.0');
+    assert.equal(offMain.status, 1);
+    assert.match(offMain.stdout, /not on main/);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(remote, { recursive: true, force: true });
+});
