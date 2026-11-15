@@ -262,9 +262,17 @@ function scheduleFixUnnamed(windowId, delayMs = 500, pass = 'default') {
 /**
  * Group all tabs in a window by domain
  * @param {number} windowId
+ * @param {{onlyIfAutoGroup?: boolean}} [options] - for automatic triggers:
+ *        re-check the setting once the lock is held, so work queued before
+ *        auto-group was turned off does nothing.
  */
-function groupTabsByDomain(windowId) {
-    return withWindowLock(windowId, () => groupWindowByDomain(windowId));
+function groupTabsByDomain(windowId, { onlyIfAutoGroup = false } = {}) {
+    return withWindowLock(windowId, async () => {
+        if (onlyIfAutoGroup && !(await loadSettings()).autoGroup) {
+            return { success: true, groupCount: 0, skipped: true };
+        }
+        return groupWindowByDomain(windowId);
+    });
 }
 
 async function groupWindowByDomain(windowId) {
@@ -342,11 +350,13 @@ async function ungroupAllTabs(windowId) {
         await saveSettings(settings);
         invalidateSettingsCache();
 
-        const tabs = await chrome.tabs.query({ windowId });
-        const groupedTabIds = tabs.filter(tab => tab.groupId !== TAB_GROUP_ID_NONE).map(tab => tab.id);
-        if (groupedTabIds.length > 0) {
-            await chrome.tabs.ungroup(groupedTabIds);
-        }
+        await withWindowLock(windowId, async () => {
+            const tabs = await chrome.tabs.query({ windowId });
+            const groupedTabIds = tabs.filter(tab => tab.groupId !== TAB_GROUP_ID_NONE).map(tab => tab.id);
+            if (groupedTabIds.length > 0) {
+                await chrome.tabs.ungroup(groupedTabIds);
+            }
+        });
 
         return { success: true, message: 'Tabs ungrouped. Auto-group disabled.' };
     } catch (error) {
@@ -443,10 +453,7 @@ function debounceRegroup(windowId, delay = 100) {
     }
     const timerId = setTimeout(async () => {
         regroupDebounceTimers.delete(windowId);
-        const settings = await getCachedSettings();
-        if (settings.autoGroup) {
-            await groupTabsByDomain(windowId);
-        }
+        await groupTabsByDomain(windowId, { onlyIfAutoGroup: true });
     }, delay);
     regroupDebounceTimers.set(windowId, timerId);
 }
@@ -468,6 +475,9 @@ async function ensureTabGrouped(tabId) {
     }
 
     await withWindowLock(tab.windowId, async () => {
+        const current = await loadSettings();
+        if (!current.autoGroup) return;
+
         let fresh;
         try {
             fresh = await chrome.tabs.get(tabId);
@@ -493,7 +503,7 @@ async function ensureTabGrouped(tabId) {
         const sameDomainTabs = allTabs.filter(t =>
             t.groupId === TAB_GROUP_ID_NONE && getGroupableDomain(t) === domain
         );
-        const minGroupSize = settings.groupSingleTabs ? 1 : 2;
+        const minGroupSize = current.groupSingleTabs ? 1 : 2;
         if (sameDomainTabs.length >= minGroupSize) {
             await createDomainGroup(sameDomainTabs.map(t => t.id), domain);
         }
@@ -564,7 +574,7 @@ async function runPeriodicCheck() {
             );
 
             if (hasUngrouped) {
-                await groupTabsByDomain(win.id);
+                await groupTabsByDomain(win.id, { onlyIfAutoGroup: true });
             }
 
             await fixUnnamedGroups(win.id);
