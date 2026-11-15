@@ -107,3 +107,36 @@ test('PR title check accepts Conventional Commits and rejects the rest', () => {
         assert.match(result.stdout, /must look like/);
     }
 });
+
+test('the store package, built exactly as the publish workflow builds it, loads in Chrome', async () => {
+    const { chromium } = require('playwright');
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), 'tab-manager-package-'));
+    const zip = path.join(work, 'extension.zip');
+    const unpacked = path.join(work, 'unpacked');
+    execFileSync('zip', ['-qr', zip, ...zippedPaths()], { cwd: EXTENSION_PATH });
+    execFileSync('unzip', ['-q', zip, '-d', unpacked]);
+
+    const context = await chromium.launchPersistentContext(path.join(work, 'profile'), {
+        channel: 'chromium',
+        headless: true,
+        args: [`--disable-extensions-except=${unpacked}`, `--load-extension=${unpacked}`]
+    });
+    try {
+        let [sw] = context.serviceWorkers();
+        if (!sw) sw = await context.waitForEvent('serviceworker', { timeout: 15000 });
+        const extensionId = new URL(sw.url()).host;
+        const manifest = await sw.evaluate(() => chrome.runtime.getManifest());
+        assert.equal(manifest.version, JSON.parse(read('manifest.json')).version);
+
+        for (const [page, selector] of [['options.html', '#autoGroup'], ['popup.html', '#domainList'], ['welcome.html', '#enableAutoGroup']]) {
+            const tab = await context.newPage();
+            const response = await tab.goto(`chrome-extension://${extensionId}/${page}`);
+            assert.ok(response.ok(), `${page} did not load`);
+            await tab.waitForSelector(selector, { timeout: 5000 });
+            await tab.close();
+        }
+    } finally {
+        await context.close();
+        fs.rmSync(work, { recursive: true, force: true });
+    }
+});
