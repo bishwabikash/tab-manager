@@ -1,0 +1,31 @@
+name: Release Please
+
+# On every push to main, keeps a release PR open that bumps the version in
+# manifest.json and package.json and updates CHANGELOG.md from Conventional
+# Commit messages. Merging that PR creates the vX.Y.Z tag and GitHub release,
+# which starts "Publish to Chrome Web Store".
+#
+# Uses a GitHub App token: tags and PRs made with the default GITHUB_TOKEN
+# don't trigger other workflows, so neither the tests nor publishing would run.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

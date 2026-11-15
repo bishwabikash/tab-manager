@@ -18,8 +18,9 @@
 # REPOSITORY SECRET:
 #   CHROME_EXTENSION_ID            — the extension's store ID
 #
-# Runs on version-tag pushes only (the post-commit hook pushes
-# them from main). Check access without publishing by running the
+# Runs on version-tag pushes. Release Please creates the tag when its
+# release PR is merged (see release-please.yml); a tag pushed by hand
+# also works. Check access without publishing by running the
 # "Check Chrome Web Store access" workflow.
 # ============================================================
 
