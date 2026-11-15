@@ -64,7 +64,7 @@ test('status --require-newer fails when manifest is not above the highest store 
     const store = await fakeStore({
         [`GET ${ITEM}:fetchStatus`]: [200, {
             publishedItemRevisionStatus: published('1.9.0'),
-            submittedItemRevisionStatus: published('1.10.0', 'PENDING_REVIEW')
+            submittedItemRevisionStatus: published('1.10.0', 'STAGED')
         }]
     });
     const warn = await run(store, ['status'], { manifestVersion: '1.9.5' });
@@ -75,6 +75,21 @@ test('status --require-newer fails when manifest is not above the highest store 
     assert.match(warn.out, /::warning::manifest\.json version 1\.9\.5 must be higher than the store's 1\.10\.0/);
     assert.equal(strict.code, 1);
     assert.equal(ok.code, 0, ok.out);
+});
+
+test('status --require-newer stops while an earlier version is still in review', async () => {
+    const store = await fakeStore({
+        [`GET ${ITEM}:fetchStatus`]: [200, {
+            publishedItemRevisionStatus: published('1.5.0'),
+            submittedItemRevisionStatus: published('1.6.0', 'PENDING_REVIEW')
+        }]
+    });
+    const strict = await run(store, ['status', '--require-newer'], { manifestVersion: '1.7.0' });
+    const relaxed = await run(store, ['status'], { manifestVersion: '1.7.0' });
+    store.close();
+    assert.equal(strict.code, 1);
+    assert.match(strict.out, /Version 1\.6\.0 \(PENDING_REVIEW\) is still in review/);
+    assert.equal(relaxed.code, 0, relaxed.out);
 });
 
 test('upload sends the zip and accepts an immediate success', async () => {

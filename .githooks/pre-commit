@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-# Fetch latest tags from remote before committing to stay in sync
-git fetch --tags --quiet || echo "[pre-commit] Could not fetch tags — continuing."

@@ -40,7 +40,7 @@ test('store zip includes every file the extension references', () => {
 });
 
 function makeRepo() {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tab-manager-hooks-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tab-manager-release-'));
     const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
     git('init', '-q', '-b', 'main');
     git('config', 'user.email', 'test@example.com');
@@ -50,37 +50,6 @@ function makeRepo() {
     git('commit', '-q', '-m', 'init', '--no-verify');
     return { dir, git };
 }
-
-const runHook = (dir, hook) =>
-    spawnSync('bash', [path.join(EXTENSION_PATH, '.githooks', hook)], { cwd: dir, encoding: 'utf8' });
-
-test('pre-commit hook does not block commits when the remote is unreachable', () => {
-    const { dir, git } = makeRepo();
-    git('remote', 'add', 'origin', path.join(dir, 'does-not-exist'));
-    const result = runHook(dir, 'pre-commit');
-    assert.equal(result.status, 0, result.stderr);
-    fs.rmSync(dir, { recursive: true, force: true });
-});
-
-test('post-commit hook only tags and pushes from main', () => {
-    const { dir, git } = makeRepo();
-    const remote = fs.mkdtempSync(path.join(os.tmpdir(), 'tab-manager-remote-'));
-    execFileSync('git', ['init', '-q', '--bare', remote]);
-    git('remote', 'add', 'origin', remote);
-
-    git('checkout', '-q', '-b', 'feature');
-    assert.equal(runHook(dir, 'post-commit').status, 0);
-    assert.equal(git('tag'), '');
-
-    git('checkout', '-q', 'main');
-    const onMain = runHook(dir, 'post-commit');
-    assert.equal(onMain.status, 0, onMain.stderr);
-    assert.equal(git('tag'), 'v9.9.9');
-    assert.match(execFileSync('git', ['tag'], { cwd: remote, encoding: 'utf8' }), /v9\.9\.9/);
-
-    fs.rmSync(dir, { recursive: true, force: true });
-    fs.rmSync(remote, { recursive: true, force: true });
-});
 
 test('release tag check accepts only v<manifest version> on main', () => {
     const remote = fs.mkdtempSync(path.join(os.tmpdir(), 'tab-manager-remote-'));
@@ -110,4 +79,31 @@ test('release tag check accepts only v<manifest version> on main', () => {
 
     fs.rmSync(dir, { recursive: true, force: true });
     fs.rmSync(remote, { recursive: true, force: true });
+});
+
+test('release-please updates every version field and they agree today', () => {
+    const config = JSON.parse(read('release-please-config.json'));
+    const extraFiles = config.packages['.']['extra-files'];
+    assert.deepEqual(extraFiles, [{ type: 'json', path: 'manifest.json', jsonpath: '$.version' }]);
+    assert.equal(config.packages['.']['release-type'], 'node');
+
+    const versions = {
+        manifest: JSON.parse(read('manifest.json')).version,
+        packageJson: JSON.parse(read('package.json')).version,
+        packageLock: JSON.parse(read('package-lock.json')).version,
+        releasePlease: JSON.parse(read('.release-please-manifest.json'))['.']
+    };
+    assert.equal(new Set(Object.values(versions)).size, 1, JSON.stringify(versions));
+});
+
+test('PR title check accepts Conventional Commits and rejects the rest', () => {
+    const check = (title) => spawnSync('bash', [path.join(EXTENSION_PATH, '.github/scripts/check-pr-title.sh'), title], { encoding: 'utf8' });
+    for (const ok of ['fix: keep pinned tabs', 'feat(popup): keyboard access', 'feat!: new storage format', 'chore(main): release 1.7.0']) {
+        assert.equal(check(ok).status, 0, ok);
+    }
+    for (const bad of ['Fix pinned tabs', 'feature: thing', 'fix:no space', 'fix: ', '$(touch /tmp/pwned)']) {
+        const result = check(bad);
+        assert.equal(result.status, 1, bad);
+        assert.match(result.stdout, /must look like/);
+    }
 });

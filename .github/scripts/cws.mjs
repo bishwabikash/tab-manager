@@ -71,6 +71,11 @@ async function status(requireNewer) {
     if (s.takenDown) console.log('::warning::The item is taken down in the Chrome Web Store.');
     if (s.warned) console.log('::warning::The item has a policy warning in the Chrome Web Store.');
 
+    const submitted = s.submittedItemRevisionStatus;
+    if (requireNewer && submitted?.state === 'PENDING_REVIEW') {
+        fail(`Version ${describe(submitted)} is still in review. The store accepts no new submission until that review finishes; re-run this job afterwards.`);
+    }
+
     const storeVersions = [
         ...revisionVersions(s.publishedItemRevisionStatus),
         ...revisionVersions(s.submittedItemRevisionStatus)
