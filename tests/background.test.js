@@ -178,6 +178,25 @@ test('ungroup removes all groups and disables auto-group', async () => {
     assert.equal((await h.getSettings()).autoGroup, false);
 });
 
+test('ungroup wins over grouping that was already queued when it ran', async () => {
+    await h.setSettings({ autoGroup: true, groupSingleTabs: true });
+    await h.open(h.url('alpha.test'));
+    await h.open(h.url('beta.test'));
+    const windowId = await h.windowId();
+    await waitFor(async () => (await h.groupedTitles(windowId)).length === 2, { message: 'groups created' });
+
+    await h.sw.evaluate(async (w) => {
+        const created = await chrome.tabs.create({ url: 'http://gamma.test/', active: false });
+        const queued = [groupTabsByDomain(w), ensureTabGrouped(created.id)];
+        debounceRegroup(w, 0);
+        await ungroupAllTabs(w);
+        await Promise.all(queued);
+    }, windowId);
+    await sleep(1500);
+
+    assert.deepEqual(await h.groups(windowId), []);
+});
+
 test('welcome page "enable" groups tabs in every window', async () => {
     await h.setSettings({ groupSingleTabs: true });
     await h.open(h.url('alpha.test'));

@@ -2,37 +2,25 @@
 # Tab Manager Pro — Chrome Web Store Publish Workflow
 # ============================================================
 #
-# REQUIRED SECRETS (configure in GitHub → Settings → Secrets →
-# Actions → New repository secret):
+# Publishes with the Chrome Web Store API v2. GitHub signs in to
+# Google Cloud through Workload Identity Federation as a service
+# account, so no long-lived Google credentials are stored.
 #
-#   CHROME_EXTENSION_ID   — The extension ID from the Chrome Web
-#                           Store dashboard URL, e.g.:
-#                           https://chrome.google.com/webstore/detail/NAME/<ID>
+# REPOSITORY VARIABLES (Settings → Secrets and variables → Actions
+# → Variables):
+#   GCP_WORKLOAD_IDENTITY_PROVIDER — projects/<number>/locations/global/
+#                                    workloadIdentityPools/<pool>/providers/<provider>
+#   GCP_SERVICE_ACCOUNT            — service account email; it must be added
+#                                    in the Chrome Web Store Developer
+#                                    Dashboard under Account
+#   CWS_PUBLISHER_ID               — Publisher ID from the Developer Dashboard
 #
-#   CHROME_CLIENT_ID      — OAuth 2.0 client ID from Google Cloud
-#   CHROME_CLIENT_SECRET  — OAuth 2.0 client secret from Google Cloud
-#   CHROME_REFRESH_TOKEN  — Long-lived refresh token obtained via OAuth
+# REPOSITORY SECRET:
+#   CHROME_EXTENSION_ID            — the extension's store ID
 #
-# HOW TO OBTAIN CWS API CREDENTIALS:
-#
-#   1. Go to https://console.cloud.google.com/
-#   2. Create a project (or reuse one) → enable "Chrome Web Store API"
-#   3. OAuth consent screen → External → add your Google account as a
-#      test user (or publish the consent screen)
-#   4. Credentials → Create OAuth client ID → Desktop application
-#      → note the Client ID and Client Secret above
-#   5. Generate a refresh token once with this one-liner (replace
-#      YOUR_CLIENT_ID):
-#
-#        npx chrome-webstore-upload-keys
-#
-#      — or follow the manual OAuth flow documented at:
-#        https://developer.chrome.com/docs/webstore/using-api/
-#
-# TRIGGER NOTES:
-#   Runs on version-tag pushes only (the post-commit hook pushes
-#   them from main). Creating a GitHub Release for a new tag also
-#   pushes that tag, so releases still publish exactly once.
+# Runs on version-tag pushes only (the post-commit hook pushes
+# them from main). Check access without publishing by running the
+# "Check Chrome Web Store access" workflow.
 # ============================================================
 
 name: Publish to Chrome Web Store
@@ -48,7 +36,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    name: Verify release tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: .github/scripts/verify-release-tag.sh
+
   test:
+    needs: verify
     uses: ./.github/workflows/test.yml
 
   publish:
@@ -56,9 +56,9 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
 
-    # Minimal permissions — read-only checkout is all we need.
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repository
@@ -86,35 +86,20 @@ jobs:
       - name: Verify zip contents
         run: unzip -l extension.zip
 
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+
       - name: Upload & publish to Chrome Web Store
         env:
-          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
-          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
-          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
         run: |
-          # Exchange refresh token for an access token
-          ACCESS_TOKEN=$(curl -s -X POST https://oauth2.googleapis.com/token \
-            -d "client_id=${CLIENT_ID}" \
-            -d "client_secret=${CLIENT_SECRET}" \
-            -d "refresh_token=${REFRESH_TOKEN}" \
-            -d "grant_type=refresh_token" \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-
-          # Upload the new zip
-          UPLOAD_RESPONSE=$(curl -s -X PUT \
-            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/${EXTENSION_ID}" \
-            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-            -H "x-goog-api-version: 2" \
-            -T extension.zip)
-          echo "Upload response: $UPLOAD_RESPONSE"
-          echo "$UPLOAD_RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); exit(0 if r.get('uploadState')=='SUCCESS' else 1)"
-
-          # Publish to all users
-          PUBLISH_RESPONSE=$(curl -s -X POST \
-            "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}/publish" \
-            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-            -H "x-goog-api-version: 2" \
-            -H "Content-Length: 0")
-          echo "Publish response: $PUBLISH_RESPONSE"
-          echo "$PUBLISH_RESPONSE" | python3 -c "import sys,json; r=json.load(sys.stdin); statuses=r.get('status',[]); print(statuses); exit(0 if any(s in ['OK','PUBLISHED_SUCCESSFULLY','ITEM_PENDING_REVIEW'] for s in statuses) else 1)"
+          node .github/scripts/cws.mjs status --require-newer
+          node .github/scripts/cws.mjs upload extension.zip
+          node .github/scripts/cws.mjs publish
