@@ -1,40 +1,37 @@
-Tab Manager Pro
+Too many tabs? Get them sorted in one click.
 
-Organize tabs by domain with automatic grouping, search, duplicate detection, and a dark/light theme.
+Tab Manager Pro groups your tabs by website — automatically, as you browse — so your tab strip finally makes sense again. Find any tab in a keystroke, wipe out duplicates instantly and bring back anything you closed by mistake.
 
-Tab Manager Pro is a powerful productivity tool designed to help you manage specific browsing habits. It automatically groups your tabs by domain, identifying and organizing them into color-coded groups for easier navigation.
+✦ WHY YOU'LL LOVE IT
 
-Key Features:
+• Auto-grouping by site — All your GitHub tabs together, all your Stack Overflow answers together. Colour-coded, labelled and always tidy. Groups you've named yourself are never touched.
 
-Automatic Tab Grouping
-Automatically organizes all your open tabs into groups based on their domain. This helps declutter your tab strip and makes it easier to find what you are looking for.
+• Find any tab in a keystroke — Search titles and web addresses across the whole window, with every match highlighted.
 
-Duplicate Tab Detection
-Identify and close duplicate tabs to save memory and reduce clutter. The extension scans all open tabs and provides a list of duplicates, allowing you to close them with a single click.
+• One-click duplicate cleanup — Spot tabs that are open twice and close the extras. Pinned tabs are always left alone. Prefer it hands-free? Let duplicates close automatically as you browse.
 
-Search and Filter
-Quickly find specific tabs using the built-in search bar. Filter tabs by title or URL to locate exactly what you need in seconds.
+• Undo the "oops" — Restore recently closed tabs, or entire windows, from the History panel.
 
-Recently Closed Tabs
-Access and restore recently closed tabs directly from the extension. A dedicated history panel keeps track of your closed sessions.
+• Mute and sort from the popup — Silence a noisy tab without hunting for it, and sort any group A–Z.
 
-Mute & Sort Tabs
-Mute noisy tabs directly from the popup without switching to them. Sort tabs within any group alphabetically with one click — resets when you close the popup so your actual tab order is never changed.
+• Dark or light — A polished theme either way, saved across sessions.
 
-Light & Dark Theme
-Switch between a polished dark theme and a clean light theme directly from the popup or the settings page. Your preference is saved across sessions.
+• Keyboard-friendly — Shortcuts for grouping and ungrouping, plus full keyboard navigation in the popup.
 
-Settings Page
-Fine-tune the extension behaviour from the built-in settings page. Control auto-grouping, single-tab groups, default collapse state, auto-close duplicates, and the visual theme — all in one place.
+✦ YOU'RE IN CONTROL
 
-Memory Efficient
-Designed with performance in mind. It uses efficient algorithms and caching mechanisms to ensure minimal impact on system resources.
+Every feature is optional. Turn auto-grouping on or off, choose whether single-tab sites get their own group, collapse groups by default, and decide whether duplicates close automatically.
 
-Keyboard Shortcuts
-- Ctrl+Shift+G: Group all tabs
-- Ctrl+Shift+U: Ungroup all tabs
+✦ PRIVATE BY DESIGN
 
-Privacy Focused
-All processing happens locally on your device. No browsing data is sent to external servers.
+Everything runs on your device. No accounts, no tracking, and no browsing data sent anywhere.
 
-Take control of your browser tabs today with Tab Manager Pro.
+✦ KEYBOARD SHORTCUTS
+
+• Ctrl+Shift+G (⌘+Shift+G on Mac) — group all tabs
+• Ctrl+Shift+U (⌘+Shift+U on Mac) — ungroup all tabs
+Change them anytime at chrome://extensions/shortcuts.
+
+Works in Google Chrome and Brave.
+
+Declutter your browser in one click — add Tab Manager Pro today.
