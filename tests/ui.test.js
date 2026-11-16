@@ -159,3 +159,19 @@ test('no-results message preserves the query as typed', async () => {
     await popup.fill('#searchInput', 'AT&T Zzz');
     assert.equal(await popup.textContent('.no-results p'), 'No tabs match "AT&T Zzz"');
 });
+
+test('popup footer stays fully visible when the tab list overflows', async () => {
+    for (let i = 0; i < 14; i++) await h.open(h.url(`site${i}.test`, `/${i}`, `Tab number ${i}`));
+    const popup = await h.open(h.extUrl('popup.html'));
+    await popup.setViewportSize({ width: 320, height: 600 });
+    await popup.waitForSelector('.tab-item');
+
+    const layout = await popup.evaluate(() => {
+        const body = document.body.getBoundingClientRect();
+        const footer = document.querySelector('.footer').getBoundingClientRect();
+        const list = document.querySelector('.domain-list');
+        return { bodyBottom: body.bottom, footerBottom: footer.bottom, listScrolls: list.scrollHeight > list.clientHeight };
+    });
+    assert.ok(layout.listScrolls, 'tab list should scroll instead of growing');
+    assert.ok(layout.footerBottom <= layout.bodyBottom, `footer cut off: ${JSON.stringify(layout)}`);
+});
