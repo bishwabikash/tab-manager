@@ -19,7 +19,7 @@ async function fakeStore(routes) {
         req.on('end', () => {
             const key = `${req.method} ${req.url}`;
             requests.push({ key, headers: req.headers, body: Buffer.concat(chunks) });
-            const handler = routes[key];
+            const handler = routes[key] || (routes['*'] && (() => routes['*'](req.method, req.url)));
             const [status, body] = typeof handler === 'function' ? handler() : handler || [404, { error: { message: 'no route' } }];
             res.writeHead(status, { 'content-type': 'application/json' });
             res.end(JSON.stringify(body));
@@ -148,4 +148,38 @@ test('missing configuration fails before any request', async () => {
     assert.equal(code, 1);
     assert.match(out, /CWS_PUBLISHER_ID is not set/);
     assert.equal(store.requests.length, 0);
+});
+
+test('metrics prints daily installs and breakdowns from queryMetrics', async () => {
+    const day = (d, installs, unique) => ({
+        date: { year: 2026, month: 11, day: d },
+        metricValues: [
+            { metric: 'installs', value: String(installs), uniqueUserCount: String(unique) },
+            { metric: 'uninstalls', value: '1' },
+            { metric: 'users', value: '300' },
+            { metric: 'page-views', value: '40' }
+        ]
+    });
+    const store = await fakeStore({
+        '*': (method, url) => {
+            const q = new URL(url, 'http://x').searchParams;
+            if (!url.startsWith(`${ITEM}:queryMetrics`)) return [404, { error: { message: 'no route' } }];
+            if (!q.get('dimensions')) return [200, { metricRows: [day(2, 25, 4), day(1, 3, 3)] }];
+            return [200, { metricRows: [
+                { dimensionValues: [`${q.get('dimensions')}-a`], metricValues: [{ metric: 'installs', value: '20' }] },
+                { dimensionValues: [`${q.get('dimensions')}-b`], metricValues: [{ metric: 'installs', value: '8' }] }
+            ] }];
+        }
+    });
+    const { code, out } = await run(store, ['metrics', '30']);
+    store.close();
+    assert.equal(code, 0, out);
+    assert.match(out, /2026-11-01\s+3\s+3\s+1\s+300\s+40\n2026-11-02\s+25\s+4/);
+    assert.match(out, /Totals: 28 installs \(7 unique users\), 2 uninstalls\./);
+    assert.match(out, /Installs by install-source:\n\s+20\s+install-source-a\n\s+8\s+install-source-b/);
+
+    const first = new URL(store.requests[0].key.split(' ')[1], 'http://x').searchParams;
+    assert.deepEqual(first.getAll('metrics'), ['installs', 'uninstalls', 'users', 'page-views']);
+    assert.ok(first.get('timeSpec.firstDate.year') && first.get('timeSpec.lastDate.day'));
+    assert.equal(store.requests.length, 6);
 });

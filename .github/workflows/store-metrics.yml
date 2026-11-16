@@ -1,0 +1,38 @@
+name: Chrome Web Store metrics
+
+# Read-only: prints daily installs, uninstalls, active users and install
+# breakdowns from the Chrome Web Store API.
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: Number of days to report
+        default: '60'
+  pull_request:
+    paths:
+      - .github/workflows/store-metrics.yml
+
+jobs:
+  metrics:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+
+      - name: Report store metrics
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          DAYS: ${{ inputs.days || '60' }}
+        run: node .github/scripts/cws.mjs metrics "$DAYS"

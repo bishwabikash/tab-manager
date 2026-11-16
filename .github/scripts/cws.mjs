@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Chrome Web Store API v2 client for CI.
-// Usage: cws.mjs status [--require-newer] | upload <zip> | publish
+// Usage: cws.mjs status [--require-newer] | upload <zip> | publish | metrics [days]
 // Env: ACCESS_TOKEN, CWS_PUBLISHER_ID, CWS_EXTENSION_ID
 import { readFile } from 'node:fs/promises';
 
@@ -114,10 +114,80 @@ async function publish() {
     console.log(`::notice::Submitted for publishing (state: ${result.state}).`);
 }
 
+const BREAKDOWNS = ['install-source', 'install-type', 'country', 'app-version', 'os'];
+
+function isoDate({ year, month, day }) {
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+async function queryMetrics(metricNames, days, dimension) {
+    const last = new Date();
+    const first = new Date(last.getTime() - (days - 1) * 86400000);
+    const params = new URLSearchParams({ pageSize: '1000' });
+    for (const m of metricNames) params.append('metrics', m);
+    if (dimension) params.append('dimensions', dimension);
+    for (const [key, d] of [['firstDate', first], ['lastDate', last]]) {
+        params.set(`timeSpec.${key}.year`, d.getUTCFullYear());
+        params.set(`timeSpec.${key}.month`, d.getUTCMonth() + 1);
+        params.set(`timeSpec.${key}.day`, d.getUTCDate());
+    }
+    const rows = [];
+    let pageToken;
+    do {
+        if (pageToken) params.set('pageToken', pageToken);
+        const page = await call('GET', `/v2/${itemName}:queryMetrics?${params}`);
+        rows.push(...(page.metricRows || []));
+        pageToken = page.nextPageToken;
+    } while (pageToken);
+    return rows;
+}
+
+function metricOf(row, name) {
+    const m = (row.metricValues || []).find(v => v.metric === name);
+    return { value: Number(m?.value || 0), unique: m?.uniqueUserCount === undefined ? null : Number(m.uniqueUserCount) };
+}
+
+async function metrics(daysArg) {
+    const days = Number(daysArg) || 60;
+    const daily = await queryMetrics(['installs', 'uninstalls', 'users', 'page-views'], days);
+    console.log(`Daily metrics, last ${days} days (installs: total / unique users)`);
+    console.log('date        installs  unique  uninstalls  active-users  page-views');
+    const totals = { installs: 0, unique: 0, uninstalls: 0 };
+    for (const row of daily.filter(r => r.date).sort((a, b) => isoDate(a.date).localeCompare(isoDate(b.date)))) {
+        const installs = metricOf(row, 'installs');
+        const uninstalls = metricOf(row, 'uninstalls').value;
+        totals.installs += installs.value;
+        totals.unique += installs.unique ?? 0;
+        totals.uninstalls += uninstalls;
+        console.log([
+            isoDate(row.date),
+            String(installs.value).padStart(8),
+            String(installs.unique ?? '-').padStart(7),
+            String(uninstalls).padStart(11),
+            String(metricOf(row, 'users').value).padStart(13),
+            String(metricOf(row, 'page-views').value).padStart(11)
+        ].join(' '));
+    }
+    console.log(`Totals: ${totals.installs} installs (${totals.unique} unique users), ${totals.uninstalls} uninstalls.`);
+
+    for (const dimension of BREAKDOWNS) {
+        const rows = await queryMetrics(['installs'], days, dimension);
+        const byValue = new Map();
+        for (const row of rows) {
+            const key = (row.dimensionValues || []).join(' / ') || '(none)';
+            byValue.set(key, (byValue.get(key) || 0) + metricOf(row, 'installs').value);
+        }
+        const sorted = [...byValue].sort((a, b) => b[1] - a[1]).slice(0, 15);
+        console.log(`\nInstalls by ${dimension}:`);
+        for (const [key, count] of sorted) console.log(`  ${String(count).padStart(6)}  ${key}`);
+    }
+}
+
 const [command, arg] = process.argv.slice(2);
 switch (command) {
     case 'status': await status(arg === '--require-newer'); break;
     case 'upload': await upload(arg); break;
     case 'publish': await publish(); break;
-    default: fail(`Unknown command "${command}". Use status, upload or publish.`);
+    case 'metrics': await metrics(arg); break;
+    default: fail(`Unknown command "${command}". Use status, upload, publish or metrics.`);
 }
