@@ -1,6 +1,6 @@
 {
   "name": "tab-manager-pro",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "private": true,
   "scripts": {
     "test": "node --test --test-concurrency=1 tests/*.test.js"
