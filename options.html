@@ -52,7 +52,12 @@
       border-bottom: 1px solid var(--outline-variant);
     }
     header svg { width: 32px; height: 32px; color: var(--primary); }
-    header h1 { font-size: 22px; font-weight: 600; }
+    header { flex-wrap: wrap; }
+    header h1 { font-size: 22px; font-weight: 600; flex: 1; white-space: nowrap; }
+    .guide-link { color: var(--primary); font-size: 14px; text-decoration: none; white-space: nowrap; }
+    .update-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .update-actions [hidden] { display: none; }
+    .guide-link:hover { text-decoration: underline; }
     .section {
       margin-bottom: 28px;
     }
@@ -184,6 +189,7 @@
       <rect x="14" y="14" width="8" height="8" rx="2" fill="currentColor" opacity="0.4"/>
     </svg>
     <h1>Tab Manager Pro — Settings</h1>
+    <a class="guide-link" href="welcome.html">Getting-started guide</a>
   </header>
 
   <div class="section">
@@ -274,6 +280,20 @@
           </svg>
           Light
         </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Updates</div>
+    <div class="setting-row" style="align-items: center;">
+      <div class="setting-info">
+        <div class="setting-label">Version <span id="installedVersion"></span></div>
+        <div class="setting-desc" id="updateStatus" role="status">Tab Manager Pro checks for updates every few hours.</div>
+      </div>
+      <div class="update-actions">
+        <button class="theme-option" id="checkUpdatesBtn">Check for updates</button>
+        <button class="theme-option active" id="applyUpdateBtn" hidden>Update now</button>
       </div>
     </div>
   </div>

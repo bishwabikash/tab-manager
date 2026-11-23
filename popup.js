@@ -52,6 +52,16 @@ function getDomainColor(domain) {
   return GROUP_COLORS[Math.abs(hash) % GROUP_COLORS.length];
 }
 
+function compareVersions(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return Math.sign(diff);
+  }
+  return 0;
+}
+
 const DUPLICATE_SKIP_PREFIXES = ['chrome://', 'chrome-extension://', 'about:', 'edge://', 'brave://'];
 
 function collectDuplicates(tabs) {
@@ -107,7 +117,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const SPINNER = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div>';
 
   // Load settings and tabs in PARALLEL — direct API calls, no SW round-trip
-  await Promise.all([loadSettings(), loadTabs(), loadShortcuts(), loadPlacement()]);
+  await Promise.all([loadSettings(), loadTabs(), loadShortcuts(), loadPlacement(), loadUpdate()]);
 
   // Event Listeners
   groupAllBtn.addEventListener('click', handleGroupAll);
@@ -116,6 +126,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   findDuplicatesBtn.addEventListener('click', handleFindDuplicates);
   closeDuplicatesBtn.addEventListener('click', handleCloseAllDuplicates);
   if (themeToggleBtn) themeToggleBtn.addEventListener('click', handleThemeToggle);
+  document.getElementById('settingsBtn').addEventListener('click', async () => {
+    await chrome.runtime.openOptionsPage();
+    window.close();
+  });
+  document.getElementById('guideBtn').addEventListener('click', async () => {
+    await chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') });
+    window.close();
+  });
 
   // Search functionality
   searchInput.addEventListener('input', handleSearch);
@@ -158,6 +176,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage({ action, ...data }, resolve);
     });
+  }
+
+  async function loadUpdate() {
+    const { pendingUpdate } = await chrome.storage.local.get('pendingUpdate');
+    const installed = chrome.runtime.getManifest().version;
+    if (!pendingUpdate || compareVersions(pendingUpdate.version, installed) <= 0) return;
+    document.getElementById('updateText').textContent = `Version ${pendingUpdate.version} is ready`;
+    const button = document.getElementById('updateBtn');
+    button.addEventListener('click', () => {
+      button.disabled = true;
+      button.textContent = 'Updating…';
+      sendMessage('applyUpdate');
+    });
+    document.getElementById('updateSection').hidden = false;
   }
 
   async function loadPlacement() {

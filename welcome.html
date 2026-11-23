@@ -1,195 +1,255 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to Tab Manager Pro</title>
+  <title>Get started with Tab Manager Pro</title>
   <style>
     :root {
       --primary: #a8c7fa;
+      --on-primary: #062e6f;
       --primary-container: #1c4587;
+      --on-primary-container: #d6e3ff;
       --surface: #131316;
       --surface-container: #1e1f23;
       --surface-container-high: #282a2e;
       --on-surface: #e3e2e6;
       --on-surface-variant: #c4c6cf;
+      --outline: #8e9099;
       --outline-variant: #44464f;
+      --success: #81c995;
+    }
+    [data-theme="light"] {
+      --primary: #1c4587;
+      --on-primary: #ffffff;
+      --primary-container: #d6e3ff;
+      --on-primary-container: #062e6f;
+      --surface: #f8f9ff;
+      --surface-container: #edf0fa;
+      --surface-container-high: #e3e6f3;
+      --on-surface: #1a1c22;
+      --on-surface-variant: #44464f;
+      --outline: #74777f;
+      --outline-variant: #c4c6cf;
+      --success: #146c2e;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: Roboto, 'Segoe UI', system-ui, -apple-system, sans-serif;
       background: var(--surface);
       color: var(--on-surface);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-    }
-    .card {
-      background: var(--surface-container);
-      border-radius: 20px;
-      padding: 48px 56px;
-      max-width: 520px;
-      width: 100%;
-      text-align: center;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-    }
-    .logo {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 14px;
-      margin-bottom: 32px;
-    }
-    .logo svg {
-      width: 40px;
-      height: 40px;
-      color: var(--primary);
-    }
-    .logo h1 {
-      font-size: 26px;
-      font-weight: 600;
-      color: var(--on-surface);
-    }
-    .tagline {
-      font-size: 15px;
-      color: var(--on-surface-variant);
-      line-height: 1.6;
-      margin-bottom: 36px;
-    }
-    .features {
-      list-style: none;
-      text-align: left;
-      margin-bottom: 40px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .features li {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      font-size: 14px;
-      color: var(--on-surface-variant);
       line-height: 1.5;
+      padding: 48px 16px 64px;
     }
-    .features li svg {
-      width: 18px;
-      height: 18px;
-      color: var(--primary);
-      flex-shrink: 0;
-      margin-top: 1px;
+    main { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+    .hero { text-align: center; padding: 8px 0 12px; }
+    .logo { display: inline-flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+    .logo svg { width: 44px; height: 44px; color: var(--primary); }
+    h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; }
+    .hero p { color: var(--on-surface-variant); font-size: 16px; max-width: 560px; margin: 8px auto 0; }
+    .privacy {
+      display: inline-flex; align-items: center; gap: 6px; margin-top: 16px;
+      padding: 6px 12px; border-radius: 9999px; font-size: 13px;
+      background: var(--surface-container-high); color: var(--on-surface-variant);
     }
-    .actions {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
+    .privacy svg { width: 14px; height: 14px; color: var(--success); }
+    .step {
+      background: var(--surface-container);
+      border-radius: 16px;
+      padding: 24px 28px;
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 0 16px;
     }
-    .btn-primary {
-      padding: 14px 28px;
-      background: var(--primary);
-      color: #062e6f;
-      border: none;
-      border-radius: 9999px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: filter 0.15s;
+    .step-number {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: grid; place-items: center;
+      background: var(--primary-container); color: var(--on-primary-container);
+      font-weight: 600; font-size: 15px;
     }
-    .btn-primary:hover { filter: brightness(1.1); }
-    .btn-secondary {
-      padding: 14px 28px;
-      background: transparent;
-      color: var(--primary);
-      border: 1px solid var(--outline-variant);
-      border-radius: 9999px;
-      font-size: 15px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .btn-secondary:hover { background: var(--surface-container-high); }
-    .done {
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-    }
-    .done svg {
-      width: 56px;
-      height: 56px;
-      color: #81c995;
-    }
-    .done p {
-      font-size: 16px;
-      color: var(--on-surface-variant);
-    }
-    .shortcuts {
-      margin-top: 32px;
-      padding: 14px;
-      border-radius: 10px;
+    .step h2 { font-size: 18px; font-weight: 600; margin: 3px 0 6px; }
+    .step-body > p { color: var(--on-surface-variant); font-size: 14px; }
+    .status {
+      display: flex; align-items: center; gap: 10px; margin-top: 14px;
+      padding: 12px 14px; border-radius: 12px; font-size: 14px;
       background: var(--surface-container-high);
-      font-size: 12px;
-      color: var(--on-surface-variant);
+    }
+    .status svg { width: 20px; height: 20px; flex-shrink: 0; }
+    .status.ok { color: var(--success); }
+    .status.todo { color: var(--on-surface); }
+    .status.todo svg { color: var(--primary); }
+    .buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    button {
+      font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
+      padding: 10px 20px; border-radius: 9999px; transition: filter .15s, background .15s;
+    }
+    .btn-primary { background: var(--primary); color: var(--on-primary); border: none; font-weight: 600; }
+    .btn-primary:hover { filter: brightness(1.08); }
+    .btn-primary:disabled { opacity: .7; cursor: default; filter: none; }
+    .btn-secondary { background: transparent; color: var(--primary); border: 1px solid var(--outline-variant); }
+    .btn-secondary:hover { background: var(--surface-container-high); }
+    button:focus-visible, .toggle-input:focus-visible + .toggle-switch { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .choice-result { margin-top: 12px; font-size: 14px; color: var(--success); }
+    .choice-result:empty { margin-top: 0; }
+    .toggles { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; }
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 12px 14px; border-radius: 12px; background: var(--surface-container-high); cursor: pointer;
+    }
+    .toggle-row strong { display: block; font-size: 14px; font-weight: 500; }
+    .toggle-row span.desc { font-size: 13px; color: var(--on-surface-variant); }
+    .toggle-input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+    .toggle-switch {
+      position: relative; flex-shrink: 0; width: 40px; height: 24px; border-radius: 12px;
+      background: var(--surface-container); border: 2px solid var(--outline); transition: all .2s;
+    }
+    .toggle-switch::after {
+      content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%;
+      background: var(--outline); transition: all .2s;
+    }
+    .toggle-input:checked + .toggle-switch { background: var(--primary); border-color: var(--primary); }
+    .toggle-input:checked + .toggle-switch::after { left: 19px; background: var(--on-primary); }
+    .tour { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 16px; }
+    .tour div { background: var(--surface-container-high); border-radius: 12px; padding: 14px; }
+    .tour svg { width: 22px; height: 22px; color: var(--primary); margin-bottom: 8px; }
+    .tour strong { display: block; font-size: 14px; margin-bottom: 2px; }
+    .tour span { font-size: 13px; color: var(--on-surface-variant); }
+    .shortcut-list { list-style: none; margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .shortcut-list li {
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 10px 14px; border-radius: 12px; background: var(--surface-container-high); font-size: 14px;
+    }
+    kbd {
+      font-family: inherit; font-size: 13px; padding: 3px 8px; border-radius: 6px;
+      background: var(--surface); border: 1px solid var(--outline-variant); white-space: nowrap;
+    }
+    .not-set { font-size: 13px; color: var(--on-surface-variant); font-style: italic; }
+    .tips { list-style: none; margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .tips li { display: flex; gap: 10px; font-size: 14px; color: var(--on-surface-variant); }
+    .tips svg { width: 18px; height: 18px; color: var(--primary); flex-shrink: 0; margin-top: 2px; }
+    .tips strong { color: var(--on-surface); font-weight: 500; }
+    footer { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+    @media (max-width: 520px) {
+      .step { grid-template-columns: 1fr; padding: 20px; }
+      .step-number { margin-bottom: 10px; }
+      h1 { font-size: 24px; }
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="logo">
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="2" y="2" width="8" height="8" rx="2" fill="currentColor" opacity="0.9"/>
-        <rect x="14" y="2" width="8" height="8" rx="2" fill="currentColor" opacity="0.7"/>
-        <rect x="2" y="14" width="8" height="8" rx="2" fill="currentColor" opacity="0.7"/>
-        <rect x="14" y="14" width="8" height="8" rx="2" fill="currentColor" opacity="0.4"/>
-      </svg>
-      <h1>Tab Manager Pro</h1>
-    </div>
+  <main>
+    <header class="hero">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="8" height="8" rx="2" fill="currentColor" opacity="0.9"/>
+          <rect x="14" y="2" width="8" height="8" rx="2" fill="currentColor" opacity="0.7"/>
+          <rect x="2" y="14" width="8" height="8" rx="2" fill="currentColor" opacity="0.7"/>
+          <rect x="14" y="14" width="8" height="8" rx="2" fill="currentColor" opacity="0.4"/>
+        </svg>
+        <h1>Welcome to Tab Manager Pro</h1>
+      </div>
+      <p>Four quick steps and your tabs will sort themselves out. You can change any of this later in Settings.</p>
+      <div class="privacy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6z"/></svg>
+        Runs entirely on your device — nothing is sent anywhere
+      </div>
+    </header>
 
-    <p class="tagline">
-      Automatically organise your tabs by website, find duplicates, and keep your browser clutter-free — all locally, no data ever leaves your device.
-    </p>
+    <section class="step" aria-labelledby="stepPin">
+      <div class="step-number" aria-hidden="true">1</div>
+      <div class="step-body">
+        <h2 id="stepPin">Pin it to your toolbar</h2>
+        <p>Keep Tab Manager Pro one click away.</p>
+        <div class="status todo" id="pinStatus" role="status">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 12h-2a2 2 0 0 1 0-4h2V4h-4v2a2 2 0 0 1-4 0V4H8v4H6a2 2 0 0 0 0 4h2v4h4v-2a2 2 0 0 1 4 0v2h4z"/></svg>
+          <span>Click the puzzle-piece icon at the top right of your browser, then the pin next to <strong>Tab Manager Pro</strong>.</span>
+        </div>
+      </div>
+    </section>
 
-    <ul class="features">
-      <li>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-        <span><strong>Auto-grouping</strong> — tabs from the same site are grouped with a colour label automatically</span>
-      </li>
-      <li>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-        <span><strong>Duplicate detection</strong> — find and close duplicate tabs in one click, or automatically</span>
-      </li>
-      <li>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-        <span><strong>Recently closed</strong> — restore any recently closed tab or window from the History panel</span>
-      </li>
-      <li>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-        <span><strong>Mute &amp; sort</strong> — mute noisy tabs and sort groups alphabetically right from the popup</span>
-      </li>
-    </ul>
+    <section class="step" aria-labelledby="stepGroup">
+      <div class="step-number" aria-hidden="true">2</div>
+      <div class="step-body">
+        <h2 id="stepGroup">Choose how grouping works</h2>
+        <p>Auto-grouping puts tabs from the same site into a colour-coded group as you browse. Groups you name yourself are never touched.</p>
+        <div class="buttons">
+          <button class="btn-primary" id="enableAutoGroup">Turn on auto-grouping</button>
+          <button class="btn-secondary" id="skipAutoGroup">I'll group tabs myself</button>
+        </div>
+        <div class="choice-result" id="choiceResult" role="status"></div>
+        <div class="toggles">
+          <label class="toggle-row">
+            <span><strong>Give single-tab sites their own group</strong><span class="desc">Otherwise a site needs two tabs before it gets a group.</span></span>
+            <input type="checkbox" class="toggle-input" id="groupSingleTabs">
+            <span class="toggle-switch"></span>
+          </label>
+          <label class="toggle-row">
+            <span><strong>Ask where address-bar tabs go</strong><span class="desc">When you open a new tab and go somewhere from the address bar, pick its group — handy for project groups.</span></span>
+            <input type="checkbox" class="toggle-input" id="askForAddressBarTabs">
+            <span class="toggle-switch"></span>
+          </label>
+        </div>
+      </div>
+    </section>
 
-    <div class="actions" id="actions">
-      <button class="btn-primary" id="enableAutoGroup">
-        Enable Auto-Grouping
-      </button>
-      <button class="btn-secondary" id="skipAutoGroup">
-        I'll manage tabs manually
-      </button>
-    </div>
+    <section class="step" aria-labelledby="stepTour">
+      <div class="step-number" aria-hidden="true">3</div>
+      <div class="step-body">
+        <h2 id="stepTour">Open the popup</h2>
+        <p>Click the Tab Manager Pro icon to see every tab in the window, sorted by site.</p>
+        <div class="tour">
+          <div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <strong>Search</strong><span>Find any tab by title or address.</span>
+          </div>
+          <div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V4h12"/></svg>
+            <strong>Duplicates</strong><span>Spot tabs open twice and close the extras.</span>
+          </div>
+          <div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <strong>History</strong><span>Bring back recently closed tabs and windows.</span>
+          </div>
+          <div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+            <strong>Mute &amp; sort</strong><span>Silence a noisy tab or sort a group A–Z.</span>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <div class="done" id="done">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
-      <p>All set! You can change settings any time via the extension options.</p>
-    </div>
+    <section class="step" aria-labelledby="stepKeys">
+      <div class="step-number" aria-hidden="true">4</div>
+      <div class="step-body">
+        <h2 id="stepKeys">Learn the shortcuts</h2>
+        <p>Group or ungroup every tab in the window without opening anything.</p>
+        <ul class="shortcut-list" id="shortcutList"></ul>
+        <div class="buttons">
+          <button class="btn-secondary" id="changeShortcuts">Change shortcuts</button>
+        </div>
+      </div>
+    </section>
 
-    <div class="shortcuts">
-      <strong>Keyboard shortcuts:</strong> &nbsp;Ctrl+Shift+G to group &nbsp;·&nbsp; Ctrl+Shift+U to ungroup
-    </div>
-  </div>
+    <section class="step" aria-labelledby="stepTips">
+      <div class="step-number" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>
+      </div>
+      <div class="step-body">
+        <h2 id="stepTips">Good to know</h2>
+        <ul class="tips">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span><strong>Your own groups stay yours.</strong> Name a group (for example "Project X") and auto-grouping leaves it alone.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span><strong>Links stay with their group.</strong> Open a link from a tab in a group and the new tab joins that group.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span><strong>Avoid naming a group after a site</strong> ("GitHub", "Google") — the extension treats those names as its own site groups.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span><strong>Pinned tabs are never grouped or closed</strong>, including by duplicate clean-up.</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <footer>
+      <button class="btn-secondary" id="openSettings">Open settings</button>
+      <button class="btn-primary" id="finish">I'm all set</button>
+    </footer>
+  </main>
   <script src="welcome.js"></script>
 </body>
 </html>
