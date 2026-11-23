@@ -107,7 +107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const SPINNER = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div>';
 
   // Load settings and tabs in PARALLEL — direct API calls, no SW round-trip
-  await Promise.all([loadSettings(), loadTabs(), loadShortcuts()]);
+  await Promise.all([loadSettings(), loadTabs(), loadShortcuts(), loadPlacement()]);
 
   // Event Listeners
   groupAllBtn.addEventListener('click', handleGroupAll);
@@ -158,6 +158,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage({ action, ...data }, resolve);
     });
+  }
+
+  async function loadPlacement() {
+    const section = document.getElementById('placementSection');
+    const response = await sendMessage('getPendingPlacement', { windowId: currentWindowId });
+    const tab = response && response.pending && response.pending[0];
+    if (!tab) {
+      section.hidden = true;
+      document.body.classList.remove('placing');
+      return;
+    }
+
+    document.getElementById('placementTab').innerHTML = `
+      ${tab.favIconUrl && !tab.favIconUrl.startsWith('chrome://') ? `<img class="tab-favicon" src="${escapeHtml(tab.favIconUrl)}" alt="">` : getFaviconPlaceholder()}
+      <span class="tab-title" title="${escapeHtml(tab.url)}">${escapeHtml(tab.title || tab.url)}</span>
+    `;
+    const groupButtons = response.groups.map(g => `
+      <button class="placement-option" data-target="${g.id}">
+        <span class="domain-color color-${escapeHtml(g.color)}"></span>${escapeHtml(g.title || 'Unnamed group')}
+      </button>
+    `).join('');
+    document.getElementById('placementOptions').innerHTML = `
+      ${groupButtons}
+      <button class="placement-option" data-target="site">Group by site (${escapeHtml(tab.domain)})</button>
+      <button class="placement-option" data-target="none">Keep ungrouped</button>
+    `;
+    section.hidden = false;
+    document.body.classList.add('placing');
+
+    section.querySelectorAll('.placement-option').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const raw = btn.dataset.target;
+        const target = raw === 'site' || raw === 'none' ? raw : Number(raw);
+        section.querySelectorAll('.placement-option').forEach(b => { b.disabled = true; });
+        await sendMessage('placeTab', { tabId: tab.id, target });
+        window.close();
+      });
+    });
+    section.querySelector('.placement-option').focus();
   }
 
   async function loadShortcuts() {

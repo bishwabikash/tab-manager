@@ -45,8 +45,26 @@ const DEFAULT_SETTINGS = {
     collapseByDefault: false,
     groupSingleTabs: false,
     autoCloseDuplicates: false,
+    askForAddressBarTabs: false,
     theme: 'dark'
 };
+
+// Tabs opened as a New Tab page and then sent somewhere from the address bar
+// (typed, history autofill, or a New Tab page shortcut) can be held back from
+// auto-grouping until the user picks where they go. Kept in session storage
+// because the service worker can stop between Ctrl+T and pressing Enter.
+const NEW_TAB_URL = /^(chrome|brave|edge):\/\/(newtab|new-tab-page)\/?$|^about:newtab$|^chrome-search:\/\/local-ntp/;
+const placement = { newTabs: new Set(), exempt: new Map() };
+const placementReady = chrome.storage.session.get('placement').then(({ placement: saved }) => {
+    for (const id of saved?.newTabs || []) placement.newTabs.add(id);
+    for (const [id, state] of saved?.exempt || []) placement.exempt.set(id, state);
+}).catch(() => { });
+
+function savePlacement() {
+    return chrome.storage.session.set({
+        placement: { newTabs: [...placement.newTabs], exempt: [...placement.exempt] }
+    });
+}
 
 function isInternalUrl(url) {
     return !url || INTERNAL_URL_PREFIXES.some(prefix => url.startsWith(prefix));
@@ -109,7 +127,7 @@ function getDomainName(url) {
  * @returns {string|null}
  */
 function getGroupableDomain(tab) {
-    if (tab.pinned || isInternalUrl(tab.url)) return null;
+    if (tab.pinned || isInternalUrl(tab.url) || placement.exempt.has(tab.id)) return null;
     const domain = getDomainName(tab.url);
     return NON_GROUPABLE_DOMAINS.has(domain) ? null : domain;
 }
@@ -277,6 +295,7 @@ function groupTabsByDomain(windowId, { onlyIfAutoGroup = false } = {}) {
 
 async function groupWindowByDomain(windowId) {
     try {
+        await placementReady;
         const [tabs, existingGroups, settings] = await Promise.all([
             chrome.tabs.query({ windowId }),
             chrome.tabGroups.query({ windowId }),
@@ -394,6 +413,10 @@ async function handleMessage(request) {
             return { success: true };
         case 'loadSettings':
             return loadSettings();
+        case 'getPendingPlacement':
+            return getPendingPlacement(await resolveWindowId(request.windowId));
+        case 'placeTab':
+            return placeTab(request.tabId, request.target);
         default:
             return { success: false, error: 'Unknown action' };
     }
@@ -464,6 +487,7 @@ function debounceRegroup(windowId, delay = 100) {
  * @param {number} tabId
  */
 async function ensureTabGrouped(tabId) {
+    await placementReady;
     const settings = await getCachedSettings();
     if (!settings.autoGroup) return;
 
@@ -512,6 +536,8 @@ async function ensureTabGrouped(tabId) {
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     const settings = await getCachedSettings();
+
+    if (changeInfo.url && await holdForPlacement(tab, changeInfo.url, settings)) return;
 
     if (changeInfo.status === 'complete' && settings.autoCloseDuplicates) {
         if (await autoCloseDuplicateTab(tab)) return;
@@ -668,6 +694,111 @@ async function updateBadge() {
 
 chrome.tabs.onCreated.addListener(() => updateBadge());
 chrome.tabs.onRemoved.addListener(() => updateBadge());
+
+// ============================================
+// ASK WHERE ADDRESS-BAR TABS GO
+// ============================================
+
+chrome.tabs.onCreated.addListener(async (tab) => {
+    if (!NEW_TAB_URL.test(tab.pendingUrl || tab.url || '')) return;
+    await placementReady;
+    placement.newTabs.add(tab.id);
+    await savePlacement();
+});
+
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+    await placementReady;
+    const wasNewTab = placement.newTabs.delete(tabId);
+    const wasExempt = placement.exempt.delete(tabId);
+    if (wasNewTab || wasExempt) await savePlacement();
+});
+
+// Chrome often prerenders an address-bar suggestion and swaps it in as a new
+// tab, so the New Tab page we were tracking is replaced rather than navigated.
+chrome.tabs.onReplaced.addListener(async (addedTabId, removedTabId) => {
+    await placementReady;
+    if (!placement.newTabs.delete(removedTabId)) return;
+    placement.newTabs.add(addedTabId);
+    try {
+        const tab = await chrome.tabs.get(addedTabId);
+        await holdForPlacement(tab, tab.url || tab.pendingUrl || '', await getCachedSettings());
+    } catch (_) {
+        placement.newTabs.delete(addedTabId);
+        await savePlacement();
+    }
+});
+
+/**
+ * Called when a tab's URL changes. If it was a New Tab page that is now
+ * going to a website, hold it ungrouped and ask the user where it goes.
+ * @returns {Promise<boolean>} true if the tab is now waiting for a choice
+ */
+async function holdForPlacement(tab, url, settings) {
+    await placementReady;
+    if (!placement.newTabs.has(tab.id) || NEW_TAB_URL.test(url)) return false;
+    placement.newTabs.delete(tab.id);
+
+    const ask = settings.askForAddressBarTabs && /^https?:/.test(url) &&
+        !tab.pinned && tab.groupId === TAB_GROUP_ID_NONE;
+    if (ask) placement.exempt.set(tab.id, 'pending');
+    await savePlacement();
+    if (!ask) return false;
+
+    await chrome.action.setBadgeText({ tabId: tab.id, text: '?' }).catch(() => { });
+    await chrome.action.openPopup({ windowId: tab.windowId }).catch(() => { });
+    return true;
+}
+
+async function getPendingPlacement(windowId) {
+    await placementReady;
+    const [tabs, groups] = await Promise.all([
+        chrome.tabs.query({ windowId }),
+        chrome.tabGroups.query({ windowId })
+    ]);
+    const pending = tabs
+        .filter(t => placement.exempt.get(t.id) === 'pending')
+        .sort((a, b) => b.id - a.id)
+        .map(t => ({ id: t.id, title: t.title, url: t.url, favIconUrl: t.favIconUrl, domain: getDomainName(t.url) }));
+    return {
+        success: true,
+        pending,
+        groups: groups.map(g => ({ id: g.id, title: g.title || '', color: g.color }))
+    };
+}
+
+/**
+ * @param {number} tabId
+ * @param {number|'site'|'none'} target - a tab group id, group by site, or keep ungrouped
+ */
+async function placeTab(tabId, target) {
+    await placementReady;
+    const tab = await chrome.tabs.get(tabId);
+
+    if (target === 'none') {
+        placement.exempt.set(tabId, 'ungrouped');
+    } else {
+        placement.exempt.delete(tabId);
+    }
+    await savePlacement();
+    await chrome.action.setBadgeText({ tabId, text: null }).catch(() => { });
+
+    if (typeof target === 'number') {
+        await withWindowLock(tab.windowId, () => chrome.tabs.group({ tabIds: [tabId], groupId: target }));
+    } else if (target === 'site') {
+        await withWindowLock(tab.windowId, async () => {
+            const domain = getGroupableDomain(tab);
+            if (!domain) return;
+            const groups = await chrome.tabGroups.query({ windowId: tab.windowId });
+            const existing = groups.find(g => g.title === domain);
+            if (existing) {
+                await addToDomainGroup([tab], existing, domain);
+            } else {
+                await createDomainGroup([tabId], domain);
+            }
+        });
+    }
+    return { success: true };
+}
 chrome.windows.onFocusChanged.addListener((windowId) => {
     if (windowId !== chrome.windows.WINDOW_ID_NONE) updateBadge();
 });

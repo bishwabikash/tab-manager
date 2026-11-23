@@ -905,6 +905,77 @@ button:focus-visible,
   border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 
+.placement-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.placement-section[hidden] {
+  display: none;
+}
+
+body.placing .search-section,
+body.placing .actions,
+body.placing .duplicates-section,
+body.placing .tabs-section {
+  display: none;
+}
+
+.placement-section h2 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.placement-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+
+.placement-tab .tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.placement-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.placement-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.placement-option:hover {
+  background: var(--md-sys-color-surface-container-high);
+}
+
+.placement-option:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .duplicates-section .section-header {
   display: flex;
   justify-content: space-between;
