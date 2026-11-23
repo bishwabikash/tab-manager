@@ -4,12 +4,13 @@ const DEFAULTS = {
   collapseByDefault: false,
   groupSingleTabs: false,
   autoCloseDuplicates: false,
+  askForAddressBarTabs: false,
   theme: 'dark'
 };
 
 let currentSettings = { ...DEFAULTS };
 
-const TOGGLE_IDS = ['autoGroup', 'groupSingleTabs', 'collapseByDefault', 'autoCloseDuplicates'];
+const TOGGLE_IDS = ['autoGroup', 'groupSingleTabs', 'collapseByDefault', 'askForAddressBarTabs', 'autoCloseDuplicates'];
 
 async function loadSettings() {
   const result = await chrome.storage.local.get('tabManagerSettings');

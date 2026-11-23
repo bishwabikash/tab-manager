@@ -60,6 +60,13 @@
 
         <!-- Tabs Panel -->
         <div class="tab-panel active" id="tabsPanel" role="tabpanel" aria-labelledby="navTabs">
+            <!-- Where should this new tab go? (hidden unless a tab is waiting) -->
+            <section class="placement-section" id="placementSection" hidden aria-labelledby="placementHeading">
+                <h2 id="placementHeading">Where should this tab go?</h2>
+                <div class="placement-tab" id="placementTab"></div>
+                <div class="placement-options" id="placementOptions" role="group" aria-labelledby="placementHeading"></div>
+            </section>
+
             <!-- Search Bar -->
             <div class="search-section">
                 <div class="search-wrapper">

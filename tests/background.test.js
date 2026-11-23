@@ -208,3 +208,31 @@ test('welcome page "enable" groups tabs in every window', async () => {
     await waitFor(async () => (await h.groupedTitles()).join() === 'Alpha,Beta', { message: 'groups in both windows' });
     assert.equal((await h.getSettings()).autoGroup, true);
 });
+
+test('links opened from a tab in a user-named group stay in that group', async () => {
+    await h.setSettings({ autoGroup: true, groupSingleTabs: true });
+    const boardUrl = h.url('jira.test', '/board', 'Project X board');
+    const board = await h.open(boardUrl);
+    const windowId = await h.windowId();
+    const groupId = await h.sw.evaluate(async ({ w, u }) => {
+        const tab = (await chrome.tabs.query({ windowId: w })).find(t => t.url === u);
+        const id = await chrome.tabs.group({ tabIds: [tab.id] });
+        await chrome.tabGroups.update(id, { title: 'Project X' });
+        return id;
+    }, { w: windowId, u: boardUrl });
+    await board.evaluate(({ a, b }) => {
+        document.body.innerHTML = `<a id="blank" href="${a}" target="_blank">a</a> <a id="plain" href="${b}">b</a>`;
+    }, { a: h.url('docs.test', '/spec', 'Spec'), b: h.url('tools.test', '/ci', 'CI') });
+
+    await board.click('#blank');
+    await board.click('#plain', { modifiers: ['Control'] });
+    await waitFor(async () => (await h.tabs(windowId)).filter(t => /\/(spec|ci)\?/.test(t.url) && t.status === 'complete').length === 2,
+        { message: 'both links opened' });
+    await h.groupWindow(windowId);
+    await h.sw.evaluate(() => runPeriodicCheck());
+    await sleep(2500);
+
+    const opened = (await h.tabs(windowId)).filter(t => /\/(spec|ci)\?/.test(t.url));
+    assert.deepEqual(opened.map(t => t.groupId), [groupId, groupId]);
+    assert.equal((await h.sw.evaluate(id => chrome.tabGroups.get(id), groupId)).title, 'Project X');
+});
