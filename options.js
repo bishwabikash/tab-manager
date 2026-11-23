@@ -68,3 +68,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     saveSetting('theme', 'light');
   });
 });
+
+const UPDATE_MESSAGES = {
+  update_available: (r) => `Version ${r.version} found. It's downloading — "Update now" will appear when it's ready.`,
+  no_update: () => "You're on the latest version.",
+  throttled: () => 'Checked very recently. Try again in a little while.'
+};
+
+async function showUpdateState() {
+  const installed = chrome.runtime.getManifest().version;
+  document.getElementById('installedVersion').textContent = installed;
+  const { pendingUpdate } = await chrome.storage.local.get('pendingUpdate');
+  const ready = pendingUpdate && pendingUpdate.version.localeCompare(installed, undefined, { numeric: true }) > 0;
+  document.getElementById('applyUpdateBtn').hidden = !ready;
+  document.getElementById('checkUpdatesBtn').hidden = !!ready;
+  if (ready) document.getElementById('updateStatus').textContent = `Version ${pendingUpdate.version} is ready to install.`;
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await showUpdateState();
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.pendingUpdate) showUpdateState();
+  });
+
+  const status = document.getElementById('updateStatus');
+  const checkBtn = document.getElementById('checkUpdatesBtn');
+  checkBtn.addEventListener('click', async () => {
+    checkBtn.disabled = true;
+    status.textContent = 'Checking…';
+    const result = await chrome.runtime.sendMessage({ action: 'checkForUpdate' });
+    const message = UPDATE_MESSAGES[result?.status];
+    status.textContent = message ? message(result) : `Couldn't check for updates${result?.message ? `: ${result.message}` : '.'}`;
+    checkBtn.disabled = false;
+  });
+  document.getElementById('applyUpdateBtn').addEventListener('click', () => {
+    status.textContent = 'Updating…';
+    chrome.runtime.sendMessage({ action: 'applyUpdate' });
+  });
+});

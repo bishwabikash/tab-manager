@@ -417,6 +417,10 @@ async function handleMessage(request) {
             return getPendingPlacement(await resolveWindowId(request.windowId));
         case 'placeTab':
             return placeTab(request.tabId, request.target);
+        case 'checkForUpdate':
+            return checkForUpdate();
+        case 'applyUpdate':
+            return applyUpdate();
         default:
             return { success: false, error: 'Unknown action' };
     }
@@ -623,8 +627,45 @@ async function stopPeriodicCheck() {
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === ALARM_NAME) {
         runPeriodicCheck();
+    } else if (alarm.name === UPDATE_ALARM) {
+        checkForUpdate();
     }
 });
+
+// ============================================
+// UPDATE CHECK
+// Listening for onUpdateAvailable makes Chrome wait to apply a downloaded
+// update until the extension reloads (the popup's "Update now") or the
+// browser restarts, so users choose when the new version takes over.
+// ============================================
+
+const UPDATE_ALARM = 'update-check';
+const UPDATE_CHECK_MINUTES = 360;
+
+async function scheduleUpdateCheck() {
+    if (await chrome.alarms.get(UPDATE_ALARM)) return;
+    await chrome.alarms.create(UPDATE_ALARM, { delayInMinutes: 1, periodInMinutes: UPDATE_CHECK_MINUTES });
+}
+
+async function checkForUpdate() {
+    let result;
+    try {
+        result = await chrome.runtime.requestUpdateCheck();
+    } catch (e) {
+        result = { status: 'error', message: e.message };
+    }
+    await chrome.storage.local.set({ lastUpdateCheck: { ...result, at: Date.now() } });
+    return result;
+}
+
+chrome.runtime.onUpdateAvailable.addListener(async ({ version }) => {
+    await chrome.storage.local.set({ pendingUpdate: { version } });
+});
+
+function applyUpdate() {
+    setTimeout(() => chrome.runtime.reload(), 100);
+    return { success: true };
+}
 
 // ============================================
 // LIFECYCLE MANAGEMENT
@@ -647,6 +688,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
         invalidateSettingsCache();
         chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') });
     } else if (details.reason === 'update') {
+        await chrome.storage.local.remove('pendingUpdate');
         const settings = await getCachedSettings();
         if (settings.autoGroup) {
             await startPeriodicCheck();
@@ -661,6 +703,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     }
     await chrome.action.setBadgeBackgroundColor({ color: '#1c4587' });
     await updateBadge();
+    await scheduleUpdateCheck();
 })();
 
 chrome.tabGroups.onCreated.addListener((group) => {
