@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tab Manager Pro",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Tame tab chaos: auto-group tabs by site, find any tab instantly and close duplicates in one click. Private, fast, Chrome & Brave.",
   "permissions": [
     "tabs",
