@@ -15,12 +15,28 @@ Every figure below is marked **[observed]** (read directly off a primary source 
 | [CWS Limited Use](https://developer.chrome.com/docs/webstore/program-policies/limited-use) | 2026-11-24 | — | Served navigation only; substantive text mirrored in Program Policies |
 | Competitor CWS listings (5) | 2026-11-24 | per-listing, below | User counts, ratings, dates read from served HTML |
 | Chrome "Organizer" / Gemini tab-group reports | 2026-11-24 | — | **Third-party only; no official Google source found** |
+| [Tab Manager Pro's own listing](https://chromewebstore.google.com/detail/tab-manager-pro/ifkbbogcfcijbfakfaklnmgbojmmoboi) | 2026-11-24 | — | Metrics and privacy section read from served HTML |
+| [Linked privacy policy (Gist)](https://gist.github.com/bishwabikash/bdf5646d5dbee3f346692d31cb314895) | 2026-11-24 | Policy says 2026-02-08 | Full text read |
 
 **Not obtained:** the Extenshi catalog MCP server could not connect this session (its host is now allowed but MCP servers bind at session start), so no catalog-side competitor data. Competitor figures come from direct Web Store fetches instead.
 
 ---
 
-## 2. Competitive landscape [observed 2026-11-24]
+## 2. Baseline first — and it changes the question [observed 2026-11-24]
+
+| | Users | Rating | Ratings | Version |
+|---|---|---|---|---|
+| **Tab Manager Pro** | **2** | — | **1** | 1.8.0 (52.45 KiB) |
+
+Two users. One rating. Published version matches `manifest.json`, so the release pipeline is working.
+
+**This reframes the brief.** The competitive analysis below was written before I had this number, and it assumed a product contesting share in a market. At two users the binding constraint is not differentiation and not compliance — it is that essentially nobody has installed this. A perfect permission posture and a flawless listing change nothing if the listing is never seen.
+
+Keep the competitive section for positioning — it is still sound about where the uncontested slot is — but read it as *where to aim once there is distribution*, not as the current problem.
+
+---
+
+## 2b. Competitive landscape [observed 2026-11-24]
 
 | Extension | Users | Rating | Ratings | Listing updated |
 |---|---|---|---|---|
@@ -85,23 +101,40 @@ This is a genuinely strong position against the policy quoted in §4.2, and agai
 
 Satisfied — see §3.
 
-### 4.3 Privacy policy required even though nothing leaves the device — risk: **HIGH**
+### 4.3 The privacy policy exists — and contradicts the extension — risk: **HIGH**
 
-This is the most actionable finding. The User Data FAQ addresses local-only handling twice, directly:
+**Correction to an earlier reading of this repo:** a privacy policy *is* published and the Dashboard field *is* set. It points to a Gist, and the listing's privacy section is filled in ("This developer declares that your data is: Not being sold to third parties…"). Nothing is missing. The problem is that what is published no longer describes what ships.
 
-> **Q3. Does an extension need to disclose user data handling if the data is only processed or stored locally on a user's device?**
-> "Yes. Extensions are required to disclose how they handle user data, even when data is processed or stored locally on a user's device and is not transmitted to external servers or third parties."
+The requirement, for context — it applies even though this extension transmits nothing:
 
-> **Q14. My extension or app handles user data, but only stores information locally… Do I still need to post a privacy policy?**
-> "Yes. This policy requires all Products that handle user information to post a privacy policy. Users may not easily be able to tell which apps or extensions save information locally or transmit it back to their servers. Your privacy policy, however, may not need to be long or complicated. It just needs to describe how the Product collects, uses, and shares user data."
+> **Q14.** "My extension or app handles user data, but only stores information locally… Do I still need to post a privacy policy?"
+> "Yes. This policy requires all Products that handle user information to post a privacy policy… Your privacy policy, however, may not need to be long or complicated."
 
-And from Program Policies:
+> **Q3.** "Yes. Extensions are required to disclose how they handle user data, even when data is processed or stored locally on a user's device and is not transmitted to external servers or third parties."
 
-> "If your Product handles any user data, then you must post an accurate and up to date privacy policy… You must make the policy accessible by providing a link in the designated Chrome Web Store Developer Dashboard field."
+The published policy is dated **2026-02-08** and reads, in full relevant part:
 
-**Gap:** there is no privacy policy document anywhere in this repository, and no privacy-policy URL in any file. `welcome.html` has a `.privacy` CSS class and a reassurance block, which is not a privacy policy.
+> "## Permissions Used
+> - **tabs**: Used locally to read tab URLs for domain-based grouping
+> - **tabGroups**: Used locally to create and manage tab groups
+> - **storage**: Used locally to save your preferences (auto-group setting)"
 
-**Important limit:** the Dashboard privacy-policy URL is store-side state, not repo state. I cannot see it from here. If that field is already populated with a live URL, this is closed. **Verify it before the next submission.**
+> "## Contact
+> [Your email address]"
+
+Three defects, in order of severity:
+
+**(a) The policy omits two of five declared permissions.** `manifest.json` declares `sessions` and `alarms`; the policy documents neither. `sessions` is the worst possible omission — it is the one that reads recently-closed tabs and windows, the most history-adjacent capability in the extension. Against the removal clause:
+
+> "If the information listed in your privacy fields contradicts the information provided in your privacy policy, or the behavior of your extension, your extensions may be removed from the Store."
+
+An undocumented `sessions` permission is precisely a policy that does not match behaviour.
+
+**(b) `[Your email address]` is an unfilled template placeholder in a live, published policy.** The policy must be "accurate and up to date." A visible placeholder is a defect any reviewer opening the link will see.
+
+**(c) The policy is stale and internally loose.** Dated February 2026, it predates the 1.7.0 address-bar placement feature and the 1.8.0 onboarding work. It also opens with "does NOT collect, store, or transmit any personal data" and then states "All data remains in your browser's local storage" — which is storing data. Google's own FAQ (Q3) treats local storage as data handling requiring disclosure, so the flat denial is the wrong framing even though the underlying privacy behaviour is genuinely good.
+
+**This is a cheap fix with a severe failure mode.** The downside is removal of a published extension, not a rejected submission. Rewriting the policy is perhaps twenty minutes.
 
 ### 4.4 Tab URLs and titles *are* web browsing activity — risk: MEDIUM
 
@@ -137,34 +170,35 @@ Satisfied — five screenshots and two promo images are in `store-assets/`, and 
 
 ## 5. What I could not establish
 
-- **Tab Manager Pro's own store standing.** I have no CWS item ID for it, so its user count, rating and review text are unknown. Competitor numbers are meaningless without that baseline — it is the single biggest gap in this brief.
-- **Whether the Dashboard privacy-policy URL is set.** Repo-invisible. See §4.3.
-- **The User Data FAQ page reports "Last updated 2016-04-23 UTC."** Its content references current policy structure, so the date may be a template artifact rather than the true revision date — but a ten-year-old stamp on a page I am relying on for a HIGH-risk finding is a real caveat. Confirm against the Dashboard's own privacy-practices form at submission time, which is authoritative in a way a docs page is not.
-- **Blog claims of 2026 policy changes** (a January 2026 disclosure change, a June 2026 justification requirement) appear in a single third-party source with no corroborating Google announcement. **Not relied upon anywhere above.** If a real deadline exists, it would change §4.3's urgency.
-- **Competitor "listing updated" dates** are listing-modification dates, used as a proxy for release freshness. Not the same as a version bump.
+- **Review text.** With one rating there is no qualitative signal to read. The incumbents' 3.3–3.8 ratings still indicate where users get let down generally, but nothing specific to this extension.
+- **Why installs are at two.** Listing age, search ranking, category competition and promotion are all plausible and none is established here. This is the question worth researching next, and it is a different investigation from this one.
+- **`gist.githubusercontent.com` is blocked** in this environment, so the policy text was read from the rendered Gist page rather than the raw file. The content is unambiguous, but it is one layer removed from source.
+- **The User Data FAQ page reports "Last updated 2016-04-23 UTC."** Its content matches current policy structure, so the date is likely a template artifact — but it is a caveat on a HIGH-risk finding. The Dashboard's own privacy-practices form is authoritative in a way a docs page is not.
+- **Blog claims of 2026 policy changes** (a January 2026 disclosure change, a June 2026 justification requirement) appear in a single third-party source with no corroborating Google announcement. **Not relied upon anywhere above.**
+- **Competitor "listing updated" dates** are listing-modification dates used as a proxy for release freshness, not version bumps.
 - **Tab Manager Plus's tab-group support** is a third-party README claim, unverified.
 
 ---
 
 ## 6. Recommendation
 
-**Hold the current position; close one compliance gap.**
+**Fix the policy contradiction this week. Then treat distribution as the actual project.**
 
-The local-only, no-account, auto-grouping-into-native-groups slot is defensible and uncontested by any high-install incumbent in this sample. The permission posture is already better than the market's common failure mode. The strategic risk is not competitive — it is a store-side disclosure gap that can get a *published* extension removed (§4.5), which is worse than a rejection.
+The compliance item is first only because it is a removal risk with a twenty-minute fix, not because it is the important problem. The important problem is two users.
 
-Ordered by expected value:
-
-1. **Verify or publish a privacy policy and set the Dashboard URL** (§4.3). Highest risk, smallest effort. A few sentences suffice per Google's own wording.
-2. **Align the privacy-practices fields with §4.4's vocabulary** — tab URLs/titles handled locally, nothing transmitted. Make the fields and the listing say the same thing.
-3. **Get Tab Manager Pro's own listing metrics** and read its negative reviews. The incumbents' 3.3–3.8 ratings suggest where users are let down; your own reviews say whether you are repeating it.
-4. **Add a regression test asserting manifest-permission ⇄ code parity.** §3 is true today; a test keeps it true, and it guards the most-reported rejection cause. The repo already has a suitable test suite.
-5. **Tighten the single-purpose field** (§4.1) so every shipped feature reads as tab management.
+1. **Rewrite the privacy policy** (§4.3). Document all five permissions — `sessions` especially — remove the `[Your email address]` placeholder, re-date it, and drop the "does not store any data" framing in favour of "stores preferences and group state locally; transmits nothing." Keep it short; Google explicitly says it may be.
+2. **Re-check the Dashboard privacy-practices answers** against the rewritten policy so §4.5 cannot bite.
+3. **Move the policy out of a Gist into the repo** and publish it at a stable URL. A Gist is a single point of failure for a store-listing requirement, and keeping the text in version control means it changes when `manifest.json` changes.
+4. **Add a regression test asserting manifest-permission ⇄ code parity, and extend it to the policy document.** §3 is clean today; defect (a) above is exactly what a test would have caught. The repo already has a suitable suite and `cws.test.js` shows the tooling is there.
+5. **Then investigate distribution.** Listing discoverability, search terms, category, and what the 200K-user extensions do that a 2-user extension does not. That is a separate research pass and the one most likely to matter.
+6. **Tighten the single-purpose field** (§4.1) — cheap, do it while editing the listing.
 
 ### Explicitly rejected
 
-- **Accounts or cloud sync.** Would move you into Toby/Workona's strength, forfeit the "private by design" claim that currently differentiates you, and pull the full weight of Limited Use, secure-transmission and third-party-transfer policy onto a product that today avoids all of it.
-- **AI grouping via a remote model key.** Unproven demand (the one listing checked: 20 users), and it converts a zero-transmission extension into one that ships tab URLs to a third party — reopening §4.4 as a genuine restriction rather than a satisfied exception. Chrome's on-device Gemini Nano would avoid the transmission problem and is the only version of this worth revisiting later.
+- **Accounts or cloud sync.** Would move into Toby/Workona's strength, forfeit the "private by design" position that is currently the clearest differentiator, and pull Limited Use, secure-transmission and third-party-transfer policy onto a product that today avoids all of it.
+- **AI grouping via a remote model key.** Unproven demand (the one listing checked: 20 users), and it converts a zero-transmission extension into one shipping tab URLs to a third party — reopening §4.4 as a real restriction rather than a satisfied exception. On-device Gemini Nano avoids the transmission problem and is the only version worth revisiting.
 - **Competing on tab *saving*.** OneTab and Session Buddy own it with 3M users, and their low ratings reflect a job users dislike having done to them, not one done badly.
+- **Any further competitive repositioning right now.** At two users there is no position to defend. Rejected as premature, not as wrong.
 
 ---
 
@@ -172,11 +206,11 @@ Ordered by expected value:
 
 Testable, and none require a reviewer's opinion:
 
-1. A privacy policy URL is live, reachable, and entered in the Dashboard field.
-2. The policy names what is handled (tab titles, URLs, group state), where it stays (device), and what is shared (nothing).
-3. The Dashboard privacy-practices answers contradict neither the policy nor the listing text.
-4. No permission in `manifest.json` lacks a corresponding API call — enforced by a test, not by inspection.
-5. The single-purpose field maps every shipped feature to tab management.
-6. Baseline metrics for Tab Manager Pro's own listing are recorded, so §2 has a reference point.
+1. The published privacy policy documents all five declared permissions, `sessions` included.
+2. No template placeholder remains in it, and its date is at or after the current release.
+3. Its data-handling language says what the extension does — stores locally, transmits nothing — rather than denying storage outright.
+4. The policy lives in version control and is served from a stable URL referenced by the Dashboard.
+5. A test fails if any `manifest.json` permission lacks either a code reference or a policy entry.
+6. The single-purpose field maps every shipped feature to tab management.
 
-**Exit condition:** architecture work is not blocked by any unresolved feasibility question here. Items 1–3 are release gates, not design questions. The one material unknown that could change direction is §5's first bullet — the extension's own standing in the market it is being positioned in.
+**Exit condition:** items 1–4 are release gates and are unblocked — they need writing, not deciding. No architecture question is blocked by this brief. The open question that should drive the next pass is §5's second bullet: why installs are at two.
