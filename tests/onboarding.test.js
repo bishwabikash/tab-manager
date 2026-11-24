@@ -47,7 +47,7 @@ test('guide buttons open settings and close the guide', async () => {
     await guide.click('#openSettings');
     await waitForPage('options.html');
     const closed = guide.waitForEvent('close');
-    await guide.click('#finish');
+    await guide.click('#finish').catch(() => { });
     await closed;
 });
 
