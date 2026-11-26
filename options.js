@@ -69,10 +69,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
+const UPDATE_CHECK_SUPPORTED = typeof chrome.runtime.requestUpdateCheck === 'function';
+const AUTO_UPDATE_TEXT = 'Your browser updates this extension automatically.';
+
 const UPDATE_MESSAGES = {
   update_available: (r) => `Version ${r.version} found. It's downloading — "Update now" will appear when it's ready.`,
   no_update: () => "You're on the latest version.",
-  throttled: () => 'Checked very recently. Try again in a little while.'
+  throttled: () => 'Checked very recently. Try again in a little while.',
+  unsupported: () => AUTO_UPDATE_TEXT
 };
 
 async function showUpdateState() {
@@ -81,8 +85,9 @@ async function showUpdateState() {
   const { pendingUpdate } = await chrome.storage.local.get('pendingUpdate');
   const ready = pendingUpdate && pendingUpdate.version.localeCompare(installed, undefined, { numeric: true }) > 0;
   document.getElementById('applyUpdateBtn').hidden = !ready;
-  document.getElementById('checkUpdatesBtn').hidden = !!ready;
+  document.getElementById('checkUpdatesBtn').hidden = !!ready || !UPDATE_CHECK_SUPPORTED;
   if (ready) document.getElementById('updateStatus').textContent = `Version ${pendingUpdate.version} is ready to install.`;
+  else if (!UPDATE_CHECK_SUPPORTED) document.getElementById('updateStatus').textContent = AUTO_UPDATE_TEXT;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
