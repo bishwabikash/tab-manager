@@ -1,10 +1,18 @@
 # ============================================================
-# Tab Manager Pro — Chrome Web Store Publish Workflow
+# Tab Manager Pro — Extension Store Publish Workflow
 # ============================================================
 #
-# Publishes with the Chrome Web Store API v2. GitHub signs in to
-# Google Cloud through Workload Identity Federation as a service
+# Builds the extension package ONCE and publishes that same
+# artifact to both stores, so Chrome and Firefox always ship
+# identical bytes.
+#
+# Chrome Web Store uses the API v2. GitHub signs in to Google
+# Cloud through Workload Identity Federation as a service
 # account, so no long-lived Google credentials are stored.
+#
+# Firefox uses addons.mozilla.org via web-ext. AMO has no
+# federated-identity equivalent, so its credentials are stored
+# secrets rather than short-lived tokens.
 #
 # REPOSITORY VARIABLES (Settings → Secrets and variables → Actions
 # → Variables):
@@ -15,8 +23,16 @@
 #                                    Dashboard under Account
 #   CWS_PUBLISHER_ID               — Publisher ID from the Developer Dashboard
 #
-# REPOSITORY SECRET:
+# REPOSITORY SECRETS:
 #   CHROME_EXTENSION_ID            — the extension's store ID
+#   AMO_JWT_ISSUER                 — AMO API key   (addons.mozilla.org →
+#                                    Manage API Keys)
+#   AMO_JWT_SECRET                 — AMO API secret
+#
+# The add-on must already exist on AMO: create the listing by hand
+# once, then this workflow uploads every later version. AMO rejects
+# re-uploading a version that already exists, which is why both
+# stores publish on a version tag rather than on every commit.
 #
 # Runs on version-tag pushes. Release Please creates the tag when its
 # release PR is merged (see release-please.yml); a tag pushed by hand
@@ -24,7 +40,7 @@
 # "Check Chrome Web Store access" workflow.
 # ============================================================
 
-name: Publish to Chrome Web Store
+name: Publish to extension stores
 
 on:
   push:
@@ -33,7 +49,7 @@ on:
 
 # Never run two publishes for the same tag at once.
 concurrency:
-  group: cws-publish-${{ github.ref }}
+  group: store-publish-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -52,22 +68,21 @@ jobs:
     needs: verify
     uses: ./.github/workflows/test.yml
 
-  publish:
-    name: Build & publish extension
+  package:
+    name: Build extension package
     needs: test
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
-      id-token: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # Zip only the extension source files. Dev/meta files
-      # (.github, *.md, store-screenshots, description.txt,
-      # *.workspace, screenshots) are intentionally excluded.
+      # (.github, *.md, store-assets, description.txt,
+      # *.workspace, docs, tests) are intentionally excluded.
+      # tests/crossbrowser.test.js asserts the Firefox package
+      # built by web-ext contains exactly this same file set.
       - name: Build extension zip
         run: |
           zip -r extension.zip \
@@ -87,6 +102,32 @@ jobs:
       - name: Verify zip contents
         run: unzip -l extension.zip
 
+      - name: Upload package for both stores
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-package
+          path: extension.zip
+          retention-days: 7
+          if-no-files-found: error
+
+  publish-chrome:
+    name: Publish to Chrome Web Store
+    needs: package
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download the package built above
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-package
+
       - id: auth
         uses: google-github-actions/auth@v3
         with:
@@ -104,3 +145,50 @@ jobs:
           node .github/scripts/cws.mjs status --require-newer
           node .github/scripts/cws.mjs upload extension.zip
           node .github/scripts/cws.mjs publish
+
+  publish-firefox:
+    name: Publish to Firefox Add-ons
+    needs: package
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Download the package built above
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-package
+
+      # Sign from the exact bytes Chrome receives, not from a
+      # second build of the working tree.
+      - name: Unpack the shared package
+        run: unzip -q extension.zip -d firefox-src
+
+      - name: Lint for Firefox
+        run: npx web-ext lint --source-dir firefox-src
+
+      # --approval-timeout 0 returns once the version is uploaded
+      # instead of blocking on human review.
+      - name: Sign & submit to addons.mozilla.org
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          npx web-ext sign \
+            --source-dir firefox-src \
+            --artifacts-dir dist \
+            --channel listed \
+            --approval-timeout 0 \
+            --api-key "$AMO_JWT_ISSUER" \
+            --api-secret "$AMO_JWT_SECRET"

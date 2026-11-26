@@ -642,17 +642,25 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 const UPDATE_ALARM = 'update-check';
 const UPDATE_CHECK_MINUTES = 360;
 
+// Firefox does not implement requestUpdateCheck; AMO delivers updates itself.
+const UPDATE_CHECK_SUPPORTED = typeof chrome.runtime.requestUpdateCheck === 'function';
+
 async function scheduleUpdateCheck() {
+    if (!UPDATE_CHECK_SUPPORTED) return;
     if (await chrome.alarms.get(UPDATE_ALARM)) return;
     await chrome.alarms.create(UPDATE_ALARM, { delayInMinutes: 1, periodInMinutes: UPDATE_CHECK_MINUTES });
 }
 
 async function checkForUpdate() {
     let result;
-    try {
-        result = await chrome.runtime.requestUpdateCheck();
-    } catch (e) {
-        result = { status: 'error', message: e.message };
+    if (!UPDATE_CHECK_SUPPORTED) {
+        result = { status: 'unsupported' };
+    } else {
+        try {
+            result = await chrome.runtime.requestUpdateCheck();
+        } catch (e) {
+            result = { status: 'error', message: e.message };
+        }
     }
     await chrome.storage.local.set({ lastUpdateCheck: { ...result, at: Date.now() } });
     return result;

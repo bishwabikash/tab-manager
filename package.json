@@ -3,9 +3,12 @@
   "version": "1.8.0",
   "private": true,
   "scripts": {
-    "test": "node --test --test-concurrency=1 tests/*.test.js"
+    "test": "node --test --test-concurrency=1 tests/*.test.js",
+    "lint:firefox": "web-ext lint --source-dir .",
+    "build:firefox": "web-ext build --source-dir . --artifacts-dir dist --overwrite-dest"
   },
   "devDependencies": {
-    "playwright": "1.63.0"
+    "playwright": "1.63.0",
+    "web-ext": "10.8.0"
   }
 }
